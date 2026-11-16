@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+dist-ssr/
+build/
+*.local
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+apps/api/target/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime state
+*.log
+logs/
+backups/*.sql.gz
+backups/*.dump
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / tool caches
+coverage/
+.turbo/
+*.tsbuildinfo

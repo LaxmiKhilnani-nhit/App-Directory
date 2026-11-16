@@ -1,0 +1,1 @@
+backups/ holds nightly pg_dump output. Contents are gitignored.

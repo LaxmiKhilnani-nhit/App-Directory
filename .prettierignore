@@ -1,0 +1,9 @@
+node_modules
+dist
+target
+pnpm-lock.yaml
+*.png
+*.ico
+*.icns
+backups
+.env

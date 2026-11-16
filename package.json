@@ -1,0 +1,24 @@
+{
+  "name": "app-directory",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:admin": "pnpm --filter @app-directory/admin dev",
+    "dev:desktop": "pnpm --filter @app-directory/desktop dev",
+    "build:admin": "pnpm --filter @app-directory/admin build",
+    "build:desktop": "pnpm --filter @app-directory/desktop build",
+    "tauri": "pnpm --filter @app-directory/desktop tauri",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "icons": "node scripts/make-placeholder-icons.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}
