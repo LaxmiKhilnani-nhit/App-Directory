@@ -3,13 +3,15 @@ use std::sync::Arc;
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::rate_limit::RateLimiter;
 
 /// Shared handler state. The pool is optional so the API can run without a database
-/// (Phase 0 health/static work, and local frontend development).
+/// (health/static endpoints work, and local frontend development does not need Postgres).
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub pool: Option<PgPool>,
+    pub auth_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -17,6 +19,7 @@ impl AppState {
         Self {
             config: Arc::new(config),
             pool,
+            auth_limiter: Arc::new(RateLimiter::new()),
         }
     }
 

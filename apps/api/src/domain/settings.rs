@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::domain::auth::LockoutPolicy;
+
 pub const APP_NAME: &str = "app_name";
 pub const SYNC_INTERVAL_HOURS: &str = "sync_interval_hours";
 pub const OFFLINE_GRACE_DAYS: &str = "offline_grace_days";
@@ -84,4 +86,29 @@ pub async fn offline_grace_days(pool: &PgPool) -> i64 {
         .ok()
         .flatten()
         .unwrap_or(7)
+}
+
+/// Failed-attempt budget before an account is temporarily locked.
+pub async fn lockout_policy(pool: &PgPool) -> LockoutPolicy {
+    let attempts = get::<i64>(pool, LOGIN_LOCKOUT_ATTEMPTS)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(5);
+    let minutes = get::<i64>(pool, LOGIN_LOCKOUT_MINUTES)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(15);
+
+    LockoutPolicy { attempts, minutes }
+}
+
+pub async fn password_min_length(pool: &PgPool) -> usize {
+    get::<i64>(pool, PASSWORD_MIN_LENGTH)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(12)
+        .clamp(1, 200) as usize
 }

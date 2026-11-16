@@ -14,23 +14,38 @@ pub struct Config {
     pub bootstrap_admin_password: Option<String>,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            bind_addr: "127.0.0.1".to_string(),
+            port: 8090,
+            app_name: "App Directory".to_string(),
+            admin_dist: PathBuf::from("admin-dist"),
+            database_url: None,
+            session_ttl_days: 30,
+            bootstrap_admin_email: None,
+            bootstrap_admin_password: None,
+        }
+    }
+}
+
 impl Config {
     pub fn from_env() -> Self {
-        let port = std::env::var("PORT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(8090);
+        let defaults = Self::default();
 
         Self {
-            bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            port,
-            app_name: std::env::var("APP_NAME").unwrap_or_else(|_| "App Directory".to_string()),
+            bind_addr: std::env::var("BIND_ADDR").unwrap_or(defaults.bind_addr),
+            port: std::env::var("PORT")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(defaults.port),
+            app_name: std::env::var("APP_NAME").unwrap_or(defaults.app_name),
             admin_dist: resolve_admin_dist(),
             database_url: non_empty_var("DATABASE_URL"),
             session_ttl_days: std::env::var("SESSION_TTL_DAYS")
                 .ok()
                 .and_then(|value| value.parse().ok())
-                .unwrap_or(30),
+                .unwrap_or(defaults.session_ttl_days),
             bootstrap_admin_email: non_empty_var("BOOTSTRAP_ADMIN_EMAIL"),
             bootstrap_admin_password: non_empty_var("BOOTSTRAP_ADMIN_PASSWORD"),
         }

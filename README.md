@@ -124,14 +124,49 @@ Effective access is defined once, in `apps/api/src/domain/entitlements.rs`:
 
 `tests/entitlements.rs` covers each branch of that rule against a real PostgreSQL instance.
 
+## Authentication
+
+Auth is a bearer-token scheme, implemented in `apps/api/src/domain/auth.rs` and exposed by
+`apps/api/src/http/auth.rs`. There is no AD/LDAP: accounts are created by admins.
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/api/v1/auth/login` | `{email, password}` → `{token, expiresAt, user, mustChangePassword}` |
+| `GET` | `/api/v1/auth/me` | revalidates a token and returns the current user |
+| `POST` | `/api/v1/auth/logout` | revokes the session used for the call |
+| `POST` | `/api/v1/auth/change-password` | `{currentPassword, newPassword}`; other sessions are revoked |
+| `POST` | `/api/v1/auth/forgot` | always `202`; queues an admin-visible reset request |
+| `POST` | `/api/v1/auth/reset` | `{email, code, newPassword}`; consumes a single-use admin code |
+
+Details that matter in practice:
+
+- Tokens are 32 random bytes (hex). Only the SHA-256 hash is stored in `sessions`, so a
+  database copy cannot be replayed as a live session. TTL is `SESSION_TTL_DAYS` (default 30).
+- Passwords use Argon2id. Unknown emails still pay one hash worth of time, so login latency
+  does not reveal whether an account exists.
+- Failed logins increment `users.failed_attempts`; at `login_lockout_attempts` (default 5) the
+  account is locked for `login_lockout_minutes` (default 15). The lock is disclosed as `423`
+  because telling a user to contact IT is more useful than hiding it.
+- Reset codes are 8 characters from an unambiguous alphabet, shown as `XXXX-XXXX`, hashed at
+  rest, valid for 72 hours and single use. Input is case-, dash- and space-insensitive.
+- Forgot-password never enumerates: known and unknown addresses both return `202`.
+- `change-password` keeps the calling session alive and revokes every other one; a reset
+  revokes all sessions for that user.
+- Per-IP sliding-window rate limits guard login, forgot and reset. Account lockout is the
+  durable defence; the limiter is in-memory and resets with the process.
+- `audit_log` records login, logout, password change and password reset. Failed sign-ins are
+  logged with `tracing` only, so a brute-force run cannot flood the admin-visible table.
+
+All failures use the uniform envelope: `{"error": {"code": "…", "message": "…"}}`.
+
 ## Build status
 
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Workspace scaffold, compose, API skeleton, Tauri shell | ✅ done |
 | 1 | Postgres schema + migrations + entitlement tests | ✅ done |
-| 2 | Auth, sessions, reset codes, audit | ⬜ next |
-| 3 | Admin API (apps, groups, users, grants, settings) | ⬜ |
+| 2 | Auth, sessions, reset codes, audit | ✅ done |
+| 3 | Admin API (apps, groups, users, grants, settings) | ⬜ next |
 | 4 | Admin SPA screens | ⬜ |
 | 5 | Client sync, cache, shortcuts, directory UI | ⬜ |
 | 6 | Packaging, clean-VM test, Intune | ⬜ |

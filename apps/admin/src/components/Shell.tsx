@@ -1,4 +1,6 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@app-directory/ui";
+import { useAuth } from "../auth";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard" },
@@ -18,8 +20,21 @@ const TITLES: Record<string, string> = {
   "/audit": "Audit log",
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  super_admin: "Super admin",
+  app_admin: "App admin",
+  user: "User",
+};
+
 export function Shell() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  async function onSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="admin-shell">
@@ -41,7 +56,17 @@ export function Shell() {
       <div className="admin-main">
         <header className="admin-topbar">
           <h1 className="admin-topbar__title">{TITLES[pathname] ?? "App Directory"}</h1>
-          <span className="ad-badge">Phase 0</span>
+          <div className="admin-user">
+            <span className="admin-user__name" title={user?.email}>
+              {user?.name}
+            </span>
+            <span className="ad-badge ad-badge--accent">
+              {ROLE_LABEL[user?.role ?? "user"] ?? user?.role}
+            </span>
+            <Button variant="ghost" size="sm" onClick={onSignOut}>
+              Sign out
+            </Button>
+          </div>
         </header>
         <main className="admin-content">
           <Outlet />

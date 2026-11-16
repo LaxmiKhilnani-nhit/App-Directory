@@ -21,6 +21,7 @@ export interface LoginResponse {
   token: string;
   expiresAt: string;
   user: SessionUser;
+  mustChangePassword: boolean;
 }
 
 export interface Announcement {
