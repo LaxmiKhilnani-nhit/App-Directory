@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use axum::{
     response::{Html, IntoResponse, Redirect},
     routing::get,
@@ -32,11 +30,13 @@ pub fn router(config: &Config) -> Router {
         return Router::new()
             .route("/admin", get(placeholder))
             .route("/admin/", get(placeholder))
-            .route("/admin/*path", get(placeholder))
+            .route("/admin/{*path}", get(placeholder))
             .route("/", get(|| async { Redirect::temporary("/admin") }));
     }
 
-    let serve = ServeDir::new(&config.admin_dist).not_found_service(ServeFile::new(index));
+    // `fallback` (not `not_found_service`) keeps the 200 status for deep links such as
+    // /admin/users, which the SPA router resolves client-side.
+    let serve = ServeDir::new(&config.admin_dist).fallback(ServeFile::new(index));
 
     Router::new()
         .nest_service("/admin", serve)
@@ -45,9 +45,4 @@ pub fn router(config: &Config) -> Router {
 
 async fn placeholder() -> impl IntoResponse {
     Html(NOT_BUILT_PAGE)
-}
-
-#[allow(dead_code)]
-fn exists(path: &Path) -> bool {
-    path.exists()
 }

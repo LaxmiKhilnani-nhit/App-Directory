@@ -25,11 +25,13 @@ async fn health(State(config): State<Config>) -> Json<Health> {
 }
 
 fn app(config: Config) -> Router {
+    let admin = static_assets::router(&config);
+
     Router::new()
         .route("/api/v1/healthz", get(health))
-        .merge(static_assets::router(&config))
-        .layer(TraceLayer::new_for_http())
         .with_state(config)
+        .merge(admin)
+        .layer(TraceLayer::new_for_http())
 }
 
 #[tokio::main]

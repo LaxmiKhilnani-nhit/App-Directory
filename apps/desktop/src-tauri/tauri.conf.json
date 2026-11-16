@@ -22,10 +22,10 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost http: https:; connect-src 'self' ipc: http://ipc.localhost",
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost http: https:; connect-src 'self' ipc: http://ipc.localhost ws: wss: http: https:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$LOCALAPPDATA/AppDirectory/icons/**"]
+        "scope": ["$LOCALDATA/AppDirectory/icons/**"]
       }
     }
   },
