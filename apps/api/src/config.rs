@@ -8,6 +8,10 @@ pub struct Config {
     pub port: u16,
     pub app_name: String,
     pub admin_dist: PathBuf,
+    pub database_url: Option<String>,
+    pub session_ttl_days: i64,
+    pub bootstrap_admin_email: Option<String>,
+    pub bootstrap_admin_password: Option<String>,
 }
 
 impl Config {
@@ -22,8 +26,19 @@ impl Config {
             port,
             app_name: std::env::var("APP_NAME").unwrap_or_else(|_| "App Directory".to_string()),
             admin_dist: resolve_admin_dist(),
+            database_url: non_empty_var("DATABASE_URL"),
+            session_ttl_days: std::env::var("SESSION_TTL_DAYS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(30),
+            bootstrap_admin_email: non_empty_var("BOOTSTRAP_ADMIN_EMAIL"),
+            bootstrap_admin_password: non_empty_var("BOOTSTRAP_ADMIN_PASSWORD"),
         }
     }
+}
+
+fn non_empty_var(key: &str) -> Option<String> {
+    std::env::var(key).ok().filter(|value| !value.trim().is_empty())
 }
 
 /// The admin SPA bundle is copied into the image at `/app/admin-dist`; during local

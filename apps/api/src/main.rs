@@ -1,12 +1,11 @@
-mod config;
-mod static_assets;
-
 use axum::{extract::State, routing::get, Json, Router};
 use serde::Serialize;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
+use app_directory_api::config::Config;
+use app_directory_api::state::AppState;
+use app_directory_api::{db, domain, static_assets};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,22 +13,35 @@ struct Health {
     status: &'static str,
     version: &'static str,
     app_name: String,
+    database: &'static str,
 }
 
-async fn health(State(config): State<Config>) -> Json<Health> {
+async fn health(State(state): State<AppState>) -> Json<Health> {
+    let database = match state.pool.as_ref() {
+        None => "not_configured",
+        Some(pool) => match sqlx::query_scalar::<_, i32>("select 1").fetch_one(pool).await {
+            Ok(_) => "ok",
+            Err(error) => {
+                tracing::error!(%error, "health check query failed");
+                "error"
+            }
+        },
+    };
+
     Json(Health {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
-        app_name: config.app_name,
+        app_name: state.config.app_name.clone(),
+        database,
     })
 }
 
-fn app(config: Config) -> Router {
-    let admin = static_assets::router(&config);
+fn app(state: AppState) -> Router {
+    let admin = static_assets::router(&state.config);
 
     Router::new()
         .route("/api/v1/healthz", get(health))
-        .with_state(config)
+        .with_state(state)
         .merge(admin)
         .layer(TraceLayer::new_for_http())
 }
@@ -43,17 +55,24 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::from_env();
-    let addr = format!("{}:{}", config.bind_addr, config.port);
+    let pool = db::connect_and_migrate(&config).await?;
+
+    if let Some(pool) = pool.as_ref() {
+        domain::seed::run(pool, &config).await?;
+    }
+
+    let state = AppState::new(config, pool);
+    let addr = format!("{}:{}", state.config.bind_addr, state.config.port);
 
     tracing::info!(
         bind = %addr,
-        app = %config.app_name,
-        admin_dist = %config.admin_dist.display(),
+        app = %state.config.app_name,
+        admin_dist = %state.config.admin_dist.display(),
         "starting App Directory API"
     );
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app(config))
+    axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
