@@ -83,8 +83,11 @@ pnpm tauri dev              # real window (needs MSVC + WebView2)
 
 ```powershell
 Copy-Item .env.example .env    # then edit the password
-docker compose -f infra/docker-compose.yml up -d --build
+docker compose -f infra/docker-compose.yml --env-file .env up -d --build
 ```
+
+Compose reads `.env` from the compose file's directory, so `--env-file .env` is required when
+running from the repo root (or `--env-file ../.env` from inside `infra/`).
 
 The API is published on `API_BIND_IP:8090` (default `127.0.0.1` for local testing; use the
 VM's LAN IP — `172.168.50.50` — in production). PostgreSQL has **no** host port; it is
