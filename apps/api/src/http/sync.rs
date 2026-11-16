@@ -51,6 +51,8 @@ pub struct SyncPayload {
     pub server_time: DateTime<Utc>,
     pub offline_valid_until: DateTime<Utc>,
     pub snapshot_days: i64,
+    /// How often the client should refresh in the background.
+    pub sync_interval_hours: i64,
     pub announcement: Option<Value>,
     pub user: SyncUser,
     pub apps: Vec<SyncApp>,
@@ -67,6 +69,7 @@ pub async fn sync(
 
     let now = Utc::now();
     let snapshot_days = settings::offline_grace_days(pool).await;
+    let sync_interval_hours = settings::sync_interval_hours(pool).await;
     let revision = revision::current(pool).await?;
     let announcement = settings::get::<Value>(pool, settings::ANNOUNCEMENT)
         .await
@@ -101,6 +104,7 @@ pub async fn sync(
         server_time: now,
         offline_valid_until: now + Duration::days(snapshot_days.max(0)),
         snapshot_days,
+        sync_interval_hours,
         announcement,
         user: SyncUser {
             name: session.user.name,

@@ -53,6 +53,8 @@ export interface SyncPayload {
   serverTime: string;
   offlineValidUntil: string;
   snapshotDays: number;
+  /** Background refresh cadence the server wants the client to use. */
+  syncIntervalHours: number;
   announcement: Announcement | null;
   user: Pick<SessionUser, "name" | "department" | "mustChangePassword">;
   apps: AppTile[];

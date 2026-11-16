@@ -79,6 +79,19 @@ pnpm dev:desktop            # browser preview at http://localhost:1420
 pnpm tauri dev              # real window (needs MSVC + WebView2)
 ```
 
+The browser preview falls back to a sample snapshot because `invoke` is unavailable outside
+Tauri; add `?screen=login` or `?screen=change-password` to that URL to review the other screens.
+
+A live end-to-end check (login, sync, icon download, encrypted cache round-trip) sits behind
+`#[ignore]` because it needs the dev stack:
+
+```powershell
+$env:APPDIR_API_BASE = "http://127.0.0.1:8090"
+$env:APPDIR_E2E_EMAIL = "admin@example.com"
+$env:APPDIR_E2E_PASSWORD = "<value from .env>"
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -- --ignored
+```
+
 ### Server stack (Docker)
 
 ```powershell
@@ -221,6 +234,30 @@ portal and the API share an origin and no CORS configuration is needed.
 matching the API's own `403 out_of_scope` answers. The client-side preview in the CSV screen is
 advisory - the server validates again and commits row by row.
 
+## Desktop client
+
+The client is a single portable `.exe` that installs nothing and keeps its state under
+`%LOCALAPPDATA%\AppDirectory`:
+
+| Path | Contents |
+|---|---|
+| `config.json` | schema version, last sync time, cached revision, "shortcuts created" flag |
+| `cache.bin` | encrypted snapshot: magic header + AES-256-GCM ciphertext |
+| `icons\<app_id>.bin` | downloaded favicons, handed to the webview as data URLs |
+
+- The session token and the snapshot key live in Windows Credential Manager (service
+  `AppDirectory`, accounts `session` and `snapshot-key`); neither is written to a file.
+- First launch writes `App Directory.lnk` to the desktop and the Start menu and never overwrites
+  an existing shortcut. Release builds do this automatically; debug builds only with
+  `APPDIR_CREATE_SHORTCUTS=1`.
+- Signing out deletes the snapshot and icons, so a shared machine never shows the previous
+  user's list offline.
+- Sync runs at launch, every `sync_interval_hours` (default 4) and on demand (one manual refresh
+  per minute). When the server is unreachable the last snapshot renders with an offline banner
+  until `offline_valid_until`; after that the login screen reports when the last sync happened.
+- Keyboard: `Ctrl+F` search, `Enter` opens the first match, `Esc` clears.
+- `must_change_password` routes the user to the change-password screen before the grid.
+
 ## Build status
 
 | Phase | Scope | State |
@@ -230,7 +267,7 @@ advisory - the server validates again and commits row by row.
 | 2 | Auth, sessions, reset codes, audit | ✅ done |
 | 3 | Admin API (apps, groups, users, grants, settings) | ✅ done |
 | 4 | Admin SPA screens | ✅ done |
-| 5 | Client sync, cache, shortcuts, directory UI | ⬜ |
+| 5 | Client sync, cache, shortcuts, directory UI | ✅ done |
 | 6 | Packaging, clean-VM test, Intune | ⬜ |
 | 7 | 400-user rollout | ⬜ |
 
