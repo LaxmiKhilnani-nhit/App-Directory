@@ -1,6 +1,9 @@
+pub mod admin;
 pub mod auth;
 pub mod extract;
 pub mod health;
+pub mod icons;
+pub mod sync;
 
 use axum::{
     extract::rejection::JsonRejection,
@@ -16,6 +19,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .merge(health::router())
+        .merge(admin::router())
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/me", get(auth::me))
@@ -25,6 +29,8 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/v1/auth/forgot", post(auth::forgot))
         .route("/api/v1/auth/reset", post(auth::reset))
+        .route("/api/v1/client/sync", get(sync::sync))
+        .route("/api/v1/icons/{app_id}", get(icons::get))
 }
 
 /// Turns axum's JSON extractor failures into the same error envelope as everything else.

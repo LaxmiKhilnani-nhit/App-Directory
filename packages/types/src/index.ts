@@ -14,6 +14,8 @@ export interface SessionUser {
   name: string;
   department: string | null;
   role: Role;
+  /** Limits an `app_admin` to a set of app categories; absent for other roles. */
+  adminScope: { categories?: string[] } | null;
   mustChangePassword: boolean;
 }
 
@@ -27,6 +29,9 @@ export interface LoginResponse {
 export interface Announcement {
   text: string;
   level: "info" | "warning" | "critical";
+  /** ISO-8601 window; absent or null means always visible. */
+  activeFrom?: string | null;
+  activeTo?: string | null;
 }
 
 export interface AppTile {

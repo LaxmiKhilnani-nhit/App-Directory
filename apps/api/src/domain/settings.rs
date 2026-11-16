@@ -58,7 +58,21 @@ pub async fn put(
     key: &str,
     value: &Value,
     actor: Option<Uuid>,
-) -> anyhow::Result<()> {
+) -> sqlx::Result<()> {
+    put_with(pool, key, value, actor).await
+}
+
+/// Same as [`put`], through any executor so a batch of settings and its audit row can share
+/// one transaction.
+pub async fn put_with<'e, E>(
+    executor: E,
+    key: &str,
+    value: &Value,
+    actor: Option<Uuid>,
+) -> sqlx::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
     sqlx::query(
         "insert into settings (key, value, updated_by) values ($1, $2, $3)
          on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by",
@@ -66,7 +80,7 @@ pub async fn put(
     .bind(key)
     .bind(value)
     .bind(actor)
-    .execute(pool)
+    .execute(executor)
     .await?;
 
     Ok(())

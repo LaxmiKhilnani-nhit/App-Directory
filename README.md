@@ -159,6 +159,44 @@ Details that matter in practice:
 
 All failures use the uniform envelope: `{"error": {"code": "…", "message": "…"}}`.
 
+## Admin API
+
+Every route below requires a bearer token for an account that has completed its first-login
+password change. `app_admin` may work only inside the categories in `admin_scope.categories`;
+everything outside that scope answers `403 out_of_scope`.
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/me` | admin | current user plus `isSuperAdmin` |
+| `GET` | `/api/v1/admin/stats` | admin | dashboard counters and current revision |
+| `GET`/`POST` | `/api/v1/admin/apps` | admin | list is scope-filtered |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/apps/{id}` | admin | delete is a soft delete |
+| `POST` | `/api/v1/admin/apps/{id}/icon` | admin | raw image body (PNG/JPEG/ICO/GIF/WebP/SVG), ≤512 KB |
+| `POST` | `/api/v1/admin/apps/{id}/refetch-icon` | admin | fetches `<origin>/favicon.ico` |
+| `PUT` | `/api/v1/admin/apps/{id}/groups` | admin | replaces group grants |
+| `PUT` | `/api/v1/admin/apps/{id}/users` | admin | replaces direct user grants |
+| `GET` | `/api/v1/admin/groups` | admin | read-only view for grant pickers |
+| `POST` | `/api/v1/admin/groups` | super | |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/groups/{id}` | super | All Users group cannot be renamed or deleted |
+| `PUT` | `/api/v1/admin/groups/{id}/members` | super | refused for derived groups |
+| `GET`/`POST` | `/api/v1/admin/users` | super | search, role and active filters |
+| `POST` | `/api/v1/admin/users/import` | super | CSV; returns per-row errors and onboarding codes |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/users/{id}` | super | delete deactivates and revokes sessions |
+| `PUT` | `/api/v1/admin/users/{id}/apps` | super | replaces direct app grants |
+| `POST` | `/api/v1/admin/users/{id}/reset-code` | super | `{purpose: "onboard"|"reset"}` |
+| `GET` | `/api/v1/admin/reset-requests` | super | `?status=open|issued|dismissed` |
+| `POST` | `/api/v1/admin/reset-requests/{id}/issue` | super | issues and resolves in one step |
+| `POST` | `/api/v1/admin/reset-requests/{id}/dismiss` | super | |
+| `GET`/`PUT` | `/api/v1/admin/settings` | super | validated keys only |
+| `GET` | `/api/v1/admin/audit` | admin | filters: actor, entityType, action, from, to |
+| `GET` | `/api/v1/client/sync` | user | full entitled snapshot (see PLAN.md §5.1) |
+| `GET` | `/api/v1/icons/{app_id}` | user | ETag + `304`; entitled users and any admin |
+
+Every mutation writes an `audit_log` row and bumps `sync_state.revision` in the same
+transaction, so a client never observes a half-applied change. `PATCH` bodies distinguish
+"field absent" (unchanged) from `null` (clear the nullable column). The last active
+super admin cannot be demoted or deactivated, and nobody can deactivate their own account.
+
 ## Build status
 
 | Phase | Scope | State |
@@ -166,7 +204,7 @@ All failures use the uniform envelope: `{"error": {"code": "…", "message": "�
 | 0 | Workspace scaffold, compose, API skeleton, Tauri shell | ✅ done |
 | 1 | Postgres schema + migrations + entitlement tests | ✅ done |
 | 2 | Auth, sessions, reset codes, audit | ✅ done |
-| 3 | Admin API (apps, groups, users, grants, settings) | ⬜ next |
+| 3 | Admin API (apps, groups, users, grants, settings) | ✅ done |
 | 4 | Admin SPA screens | ⬜ |
 | 5 | Client sync, cache, shortcuts, directory UI | ⬜ |
 | 6 | Packaging, clean-VM test, Intune | ⬜ |

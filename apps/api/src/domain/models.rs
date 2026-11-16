@@ -108,7 +108,8 @@ pub struct ResetRequest {
     pub resolved_by: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Setting {
     pub key: String,
     pub value: serde_json::Value,

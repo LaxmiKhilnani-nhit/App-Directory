@@ -28,6 +28,7 @@ pub struct SessionUser {
     pub name: String,
     pub department: Option<String>,
     pub role: String,
+    pub admin_scope: Option<serde_json::Value>,
     pub must_change_password: bool,
 }
 
@@ -184,6 +185,7 @@ struct UserRow {
     name: String,
     department: Option<String>,
     role: String,
+    admin_scope: Option<serde_json::Value>,
     must_change_password: bool,
 }
 
@@ -195,6 +197,7 @@ impl From<UserRow> for SessionUser {
             name: row.name,
             department: row.department,
             role: row.role,
+            admin_scope: row.admin_scope,
             must_change_password: row.must_change_password,
         }
     }
@@ -272,7 +275,7 @@ pub async fn login(
     .await?;
 
     let user = sqlx::query_as::<_, UserRow>(
-        "select id, email, name, department, role, must_change_password
+        "select id, email, name, department, role, admin_scope, must_change_password
            from users where id = $1",
     )
     .bind(row.id)
@@ -319,6 +322,7 @@ struct SessionRow {
     name: String,
     department: Option<String>,
     role: String,
+    admin_scope: Option<serde_json::Value>,
     must_change_password: bool,
     is_active: bool,
 }
@@ -341,6 +345,7 @@ pub async fn authenticate(pool: &PgPool, token: &str) -> AuthResult<AuthSession>
                 u.name         as name,
                 u.department   as department,
                 u.role         as role,
+                u.admin_scope  as admin_scope,
                 u.must_change_password as must_change_password,
                 u.is_active    as is_active
            from sessions s
@@ -379,6 +384,7 @@ pub async fn authenticate(pool: &PgPool, token: &str) -> AuthResult<AuthSession>
             name: row.name,
             department: row.department,
             role: row.role,
+            admin_scope: row.admin_scope,
             must_change_password: row.must_change_password,
         },
     })
@@ -474,6 +480,23 @@ pub async fn issue_reset_code(
     created_by: Option<Uuid>,
     ttl_hours: i64,
 ) -> AuthResult<String> {
+    issue_reset_code_tx(pool, user_id, purpose, created_by, ttl_hours)
+        .await
+        .map(|(code, _)| code)
+}
+
+/// Same as [`issue_reset_code`], but through an arbitrary executor so the CSV importer can
+/// issue codes inside its own transaction. Returns the expiry for the one-time display.
+pub async fn issue_reset_code_tx<'e, E>(
+    executor: E,
+    user_id: Uuid,
+    purpose: &str,
+    created_by: Option<Uuid>,
+    ttl_hours: i64,
+) -> AuthResult<(String, DateTime<Utc>)>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
     let (display, canonical) = generate_reset_code();
     let code_hash = password::hash_password(&canonical)?;
     let expires_at = Utc::now() + ChronoDuration::hours(ttl_hours.max(1));
@@ -487,10 +510,10 @@ pub async fn issue_reset_code(
     .bind(purpose)
     .bind(expires_at)
     .bind(created_by)
-    .execute(pool)
+    .execute(executor)
     .await?;
 
-    Ok(display)
+    Ok((display, expires_at))
 }
 
 /// Consumes a reset code and sets a new password. Returns the user it applied to.
