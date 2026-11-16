@@ -70,3 +70,142 @@ export interface HealthResponse {
   version: string;
   appName: string;
 }
+
+// ---------------------------------------------------------------- admin portal
+
+export interface AdminMe {
+  user: SessionUser;
+  isSuperAdmin: boolean;
+}
+
+export interface Stats {
+  users: number;
+  activeUsers: number;
+  apps: number;
+  enabledApps: number;
+  groups: number;
+  openResetRequests: number;
+  loginsToday: number;
+  revision: number;
+}
+
+export interface AdminApp {
+  id: string;
+  name: string;
+  url: string;
+  description: string | null;
+  category: string | null;
+  color: string | null;
+  sortOrder: number;
+  isEnabled: boolean;
+  offlineVisible: boolean;
+  iconSource: string;
+  iconMime: string | null;
+  iconFetchedAt: string | null;
+  iconEtag: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  groupIds: string[];
+  userIds: string[];
+}
+
+export interface AdminGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  autoDepartment: string | null;
+  isAllUsers: boolean;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  appCount: number;
+}
+
+export interface GroupDetail extends AdminGroup {
+  userIds: string[];
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  department: string | null;
+  role: Role;
+  adminScope: { categories?: string[] } | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hasPassword: boolean;
+}
+
+export interface UserDetail extends AdminUser {
+  groupIds: string[];
+  appIds: string[];
+}
+
+export interface UserPage {
+  users: AdminUser[];
+  total: number;
+}
+
+export interface IssuedCode {
+  code: string;
+  expiresAt: string;
+}
+
+export interface ResetRequest {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  status: "open" | "issued" | "dismissed";
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface OnboardingCode {
+  email: string;
+  code: string;
+  expiresAt: string;
+}
+
+export interface ImportErrorRow {
+  line: number;
+  email: string | null;
+  message: string;
+}
+
+export interface ImportReport {
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: ImportErrorRow[];
+  onboarding: OnboardingCode[];
+}
+
+export interface AuditRow {
+  id: number;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  before: unknown;
+  after: unknown;
+  createdAt: string;
+}
+
+export interface AuditPage {
+  entries: AuditRow[];
+  total: number;
+}
+
+export interface Setting {
+  key: string;
+  value: unknown;
+  updatedAt: string;
+  updatedBy: string | null;
+}

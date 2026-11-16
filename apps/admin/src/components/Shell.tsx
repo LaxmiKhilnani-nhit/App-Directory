@@ -2,13 +2,21 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@app-directory/ui";
 import { useAuth } from "../auth";
 
-const NAV = [
+interface NavItem {
+  to: string;
+  label: string;
+  superOnly?: boolean;
+}
+
+const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/apps", label: "Apps" },
-  { to: "/groups", label: "Groups" },
-  { to: "/users", label: "Users" },
-  { to: "/settings", label: "Settings" },
-  { to: "/audit", label: "Audit log" },
+  { to: "/groups", label: "Groups", superOnly: true },
+  { to: "/users", label: "Users", superOnly: true },
+  { to: "/import", label: "CSV import", superOnly: true },
+  { to: "/reset-requests", label: "Reset queue", superOnly: true },
+  { to: "/settings", label: "Settings", superOnly: true },
+  { to: "/audit", label: "Audit log", superOnly: true },
 ];
 
 const TITLES: Record<string, string> = {
@@ -16,6 +24,8 @@ const TITLES: Record<string, string> = {
   "/apps": "Applications",
   "/groups": "Groups",
   "/users": "Users & access",
+  "/import": "CSV import",
+  "/reset-requests": "Password reset requests",
   "/settings": "Settings",
   "/audit": "Audit log",
 };
@@ -30,6 +40,9 @@ export function Shell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const isSuper = user?.role === "super_admin";
+
+  const items = NAV.filter((item) => !item.superOnly || isSuper);
 
   async function onSignOut() {
     await signOut();
@@ -46,7 +59,7 @@ export function Shell() {
           </div>
         </div>
         <nav className="admin-nav">
-          {NAV.map((item) => (
+          {items.map((item) => (
             <NavLink key={item.to} to={item.to}>
               {item.label}
             </NavLink>

@@ -200,6 +200,27 @@ transaction, so a client never observes a half-applied change. `PATCH` bodies di
 "field absent" (unchanged) from `null` (clear the nullable column). The last active
 super admin cannot be demoted or deactivated, and nobody can deactivate their own account.
 
+## Admin portal screens
+
+The SPA is built into the API image (`infra/Dockerfile.api`) and served from `/admin`, so the
+portal and the API share an origin and no CORS configuration is needed.
+
+| Screen | Route | Who | Notes |
+|---|---|---|---|
+| Sign in / change password | `/admin/login`, `/admin/change-password` | anyone | first-login gate before any admin screen |
+| Dashboard | `/admin/dashboard` | admin | scoped counters for `app_admin`; its activity feed is limited to app changes |
+| Applications | `/admin/apps` | admin | search/filter table, create/edit drawer with tile preview, icon upload or refetch, group and direct-user grants |
+| Groups | `/admin/groups` | super | manual membership picker, auto-by-department groups, built-in All Users is view-only |
+| Users & access | `/admin/users` | super | profile, role and admin scope, direct grants, onboarding/reset codes, deactivate |
+| CSV import | `/admin/import` | super | paste or upload, column mapping, client-side preview, per-row errors and one-time onboarding codes |
+| Reset queue | `/admin/reset-requests` | super | issue a code or dismiss, filtered by status |
+| Settings | `/admin/settings` | super | app name, sync interval, offline grace, password policy, announcement banner with preview |
+| Audit log | `/admin/audit` | super | filters plus expandable before/after JSON |
+
+`app_admin` accounts only see Dashboard and Apps; every other route redirects to `/admin/apps`,
+matching the API's own `403 out_of_scope` answers. The client-side preview in the CSV screen is
+advisory - the server validates again and commits row by row.
+
 ## Build status
 
 | Phase | Scope | State |
@@ -208,7 +229,7 @@ super admin cannot be demoted or deactivated, and nobody can deactivate their ow
 | 1 | Postgres schema + migrations + entitlement tests | ✅ done |
 | 2 | Auth, sessions, reset codes, audit | ✅ done |
 | 3 | Admin API (apps, groups, users, grants, settings) | ✅ done |
-| 4 | Admin SPA screens | ⬜ |
+| 4 | Admin SPA screens | ✅ done |
 | 5 | Client sync, cache, shortcuts, directory UI | ⬜ |
 | 6 | Packaging, clean-VM test, Intune | ⬜ |
 | 7 | 400-user rollout | ⬜ |

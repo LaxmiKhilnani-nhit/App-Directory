@@ -39,9 +39,7 @@ export function ChangePassword() {
     } catch (error) {
       if (error instanceof ApiError) {
         setMessage(
-          error.code === "invalid_password"
-            ? "Current password is incorrect."
-            : error.message,
+          error.code === "invalid_password" ? "Current password is incorrect." : error.message,
         );
       } else {
         setMessage("Could not reach the server.");

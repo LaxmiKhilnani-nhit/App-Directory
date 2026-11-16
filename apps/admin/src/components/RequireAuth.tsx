@@ -33,3 +33,15 @@ export function PasswordGate({ children }: { children: ReactNode }) {
 
   return <>{children}</>;
 }
+
+/// Server screens for groups, users, imports, settings and audit are super-admin only.
+/// App admins are redirected to the app list their scope can actually reach.
+export function SuperAdminOnly({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+
+  if (user?.role !== "super_admin") {
+    return <Navigate to="/apps" replace />;
+  }
+
+  return <>{children}</>;
+}

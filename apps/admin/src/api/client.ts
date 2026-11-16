@@ -20,19 +20,13 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set("Accept", "application/json");
-  if (init.body) headers.set("Content-Type", "application/json");
+export function authHeaders(extra?: HeadersInit): Headers {
+  const headers = new Headers(extra);
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+  return headers;
+}
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiError(0, "network_error", "Could not reach the server.");
-  }
-
+async function parse<T>(response: Response): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
@@ -55,6 +49,54 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   return payload as T;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = authHeaders(init.headers);
+  headers.set("Accept", "application/json");
+  if (init.body && !(init.body instanceof Blob)) headers.set("Content-Type", "application/json");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  } catch {
+    throw new ApiError(0, "network_error", "Could not reach the server.");
+  }
+
+  return parse<T>(response);
+}
+
+/** Raw GET for binary endpoints (icons), which cannot ride the `<img>` tag — tokens travel in a header. */
+export async function requestBlob(path: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  } catch {
+    throw new ApiError(0, "network_error", "Could not reach the server.");
+  }
+
+  if (!response.ok) {
+    // Error bodies are JSON, so reuse the normal envelope parser for the message.
+    await parse<unknown>(response);
+  }
+
+  return response.blob();
+}
+
+/** Raw POST of a file body, used by the icon upload endpoint. */
+export async function uploadFile<T>(path: string, file: Blob, contentType: string): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": contentType, Accept: "application/json" }),
+      body: file,
+    });
+  } catch {
+    throw new ApiError(0, "network_error", "Could not reach the server.");
+  }
+
+  return parse<T>(response);
 }
 
 export const api = {

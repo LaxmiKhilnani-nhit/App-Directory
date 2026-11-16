@@ -1,40 +1,128 @@
-import { Button, EmptyState } from "@app-directory/ui";
+import { Link } from "react-router-dom";
+import { Badge, EmptyState, Spinner } from "@app-directory/ui";
+import { adminApi } from "../api/admin";
+import { useAuth } from "../auth";
+import { PageHeader, Notice } from "../components/PageHeader";
+import { useAsync } from "../hooks/useAsync";
+import { formatRelative } from "../utils/format";
 
 export function Dashboard() {
+  const { user } = useAuth();
+  const isSuper = user?.role === "super_admin";
+
+  const stats = useAsync(() => adminApi.stats(), []);
+  const audit = useAsync(
+    () => adminApi.audit(isSuper ? { limit: 8 } : { limit: 8, entityType: "app" }),
+    [isSuper],
+  );
+
+  const metrics = stats.data
+    ? isSuper
+      ? [
+          ["Users", `${stats.data.activeUsers}`, `${stats.data.users} total`],
+          ["Apps", `${stats.data.enabledApps}`, `${stats.data.apps} total`],
+          ["Groups", `${stats.data.groups}`, "manual + automatic"],
+          ["Open reset requests", `${stats.data.openResetRequests}`, "awaiting action"],
+          ["Sign-ins today", `${stats.data.loginsToday}`, "accounts seen today"],
+          ["Sync revision", `${stats.data.revision}`, "bumped on every change"],
+        ]
+      : [
+          ["Apps in your scope", `${stats.data.enabledApps}`, `${stats.data.apps} total`],
+          ["Sync revision", `${stats.data.revision}`, "bumped on every change"],
+        ]
+    : [];
+
   return (
     <>
-      <div className="admin-grid">
-        {[
-          ["Users", "0"],
-          ["Apps", "0"],
-          ["Groups", "0"],
-          ["Open reset requests", "0"],
-        ].map(([label, value]) => (
-          <div className="admin-metric" key={label}>
-            <div className="admin-metric__label">{label}</div>
-            <div className="admin-metric__value">{value}</div>
-          </div>
-        ))}
-      </div>
+      <PageHeader
+        title={`Welcome back, ${user?.name ?? "admin"}`}
+        description="What is happening in App Directory right now."
+        actions={
+          <Link to="/apps" className="ad-btn ad-btn--primary">
+            Manage apps
+          </Link>
+        }
+      />
 
-      <section className="admin-card">
-        <h2 className="admin-card__title">Getting started</h2>
-        <p className="admin-muted">
-          Phase 0 scaffold. Counts, recent activity and the reset queue populate once the data
-          layer (Phase 1) and admin API (Phase 3) are in place.
-        </p>
-        <div style={{ marginTop: "var(--space-4)" }}>
-          <Button variant="primary" disabled>
-            Add your first app
-          </Button>
+      {stats.error ? <Notice tone="danger">{stats.error}</Notice> : null}
+
+      {stats.loading && !stats.data ? (
+        <div className="admin-card">
+          <Spinner label="Loading dashboard…" />
         </div>
-      </section>
+      ) : null}
+
+      {stats.data ? (
+        <div className="admin-grid">
+          {metrics.map(([label, value, hint]) => (
+            <div className="admin-metric" key={label}>
+              <div className="admin-metric__label">{label}</div>
+              <div className="admin-metric__value">{value}</div>
+              <div className="admin-inline-hint">{hint}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {isSuper && stats.data && stats.data.openResetRequests > 0 ? (
+        <Notice tone="info">
+          {stats.data.openResetRequests} password reset{" "}
+          {stats.data.openResetRequests === 1 ? "request is" : "requests are"} waiting.{" "}
+          <Link to="/reset-requests">Open the queue</Link>.
+        </Notice>
+      ) : null}
 
       <section className="admin-card">
-        <EmptyState
-          title="No activity yet"
-          description="Admin actions will appear here as they are recorded in the audit log."
-        />
+        <div className="admin-pagehead">
+          <h2 className="admin-card__title">Recent activity</h2>
+          {isSuper ? (
+            <Link to="/audit" className="admin-inline-hint">
+              View the full audit log
+            </Link>
+          ) : (
+            <span className="admin-inline-hint">App changes only</span>
+          )}
+        </div>
+
+        {audit.error ? <Notice tone="danger">{audit.error}</Notice> : null}
+
+        {audit.loading && !audit.data ? <Spinner label="Loading activity…" /> : null}
+
+        {audit.data && audit.data.entries.length === 0 ? (
+          <EmptyState
+            title="No activity yet"
+            description="Admin actions will appear here as they are recorded in the audit log."
+          />
+        ) : null}
+
+        {audit.data && audit.data.entries.length > 0 ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Entity</th>
+                  <th>Actor</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.data.entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>
+                      <Badge tone="accent">{entry.action}</Badge>
+                    </td>
+                    <td className="admin-muted-cell">{entry.entityType}</td>
+                    <td>{entry.actorEmail ?? "system"}</td>
+                    <td className="admin-muted-cell admin-nowrap" title={entry.createdAt}>
+                      {formatRelative(entry.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
     </>
   );

@@ -1,19 +1,27 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth";
 import { Shell } from "./components/Shell";
-import { PasswordGate, RequireAuth } from "./components/RequireAuth";
+import { PasswordGate, RequireAuth, SuperAdminOnly } from "./components/RequireAuth";
 import { Login } from "./pages/Login";
 import { ChangePassword } from "./pages/ChangePassword";
 import { Dashboard } from "./pages/Dashboard";
 import { Apps } from "./pages/Apps";
 import { Groups } from "./pages/Groups";
 import { Users } from "./pages/Users";
+import { Import } from "./pages/Import";
+import { ResetRequests } from "./pages/ResetRequests";
 import { Settings } from "./pages/Settings";
 import { Audit } from "./pages/Audit";
 
+function Super({ children }: { children: ReactNode }) {
+  return <SuperAdminOnly>{children}</SuperAdminOnly>;
+}
+
 /**
- * Phase 2 shell: real sessions. Every route below `/` requires a valid bearer token;
- * `PasswordGate` sends users who still need to set a password to the change screen first.
+ * Sessions are real bearer tokens; `PasswordGate` sends accounts that still need to set a
+ * password to the change screen first. App admins only reach the scoped app screens, matching
+ * the API's own restrictions.
  */
 export function App() {
   return (
@@ -42,10 +50,54 @@ export function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/apps" element={<Apps />} />
-          <Route path="/groups" element={<Groups />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/audit" element={<Audit />} />
+          <Route
+            path="/groups"
+            element={
+              <Super>
+                <Groups />
+              </Super>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <Super>
+                <Users />
+              </Super>
+            }
+          />
+          <Route
+            path="/import"
+            element={
+              <Super>
+                <Import />
+              </Super>
+            }
+          />
+          <Route
+            path="/reset-requests"
+            element={
+              <Super>
+                <ResetRequests />
+              </Super>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <Super>
+                <Settings />
+              </Super>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <Super>
+                <Audit />
+              </Super>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
