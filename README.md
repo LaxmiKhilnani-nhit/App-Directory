@@ -92,6 +92,17 @@ $env:APPDIR_E2E_PASSWORD = "<value from .env>"
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -- --ignored
 ```
 
+### Portable client (single exe)
+
+```powershell
+pnpm package:desktop
+```
+
+This runs `tauri build --no-bundle`, so the output is the bare binary rather than an installer.
+It lands at `release\App Directory.exe` — one file, nothing to install. Copy it anywhere and
+run it; the first launch writes `%LOCALAPPDATA%\AppDirectory`, the encrypted snapshot and the
+desktop/Start-menu shortcuts. `--debug` skips LTO for a fast structural check.
+
 ### Server stack (Docker)
 
 ```powershell
@@ -268,7 +279,7 @@ The client is a single portable `.exe` that installs nothing and keeps its state
 | 3 | Admin API (apps, groups, users, grants, settings) | ✅ done |
 | 4 | Admin SPA screens | ✅ done |
 | 5 | Client sync, cache, shortcuts, directory UI | ✅ done |
-| 6 | Packaging, clean-VM test, Intune | ⬜ |
+| 6 | Packaging: portable `.exe`, first-run shortcuts | 🟡 built and smoke-tested; clean-VM check + Intune deferred |
 | 7 | 400-user rollout | ⬜ |
 
 ## Known risk (temporary)

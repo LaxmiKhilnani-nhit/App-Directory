@@ -9,6 +9,7 @@
   "scripts": {
     "dev:admin": "pnpm --filter @app-directory/admin dev",
     "dev:desktop": "pnpm --filter @app-directory/desktop dev",
+    "package:desktop": "node scripts/package-desktop.mjs",
     "build:admin": "pnpm --filter @app-directory/admin build",
     "build:desktop": "pnpm --filter @app-directory/desktop build",
     "tauri": "pnpm --filter @app-directory/desktop tauri",

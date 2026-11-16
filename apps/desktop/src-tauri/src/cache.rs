@@ -121,8 +121,11 @@ pub fn load() -> Result<Option<StoredSnapshot>, String> {
     Ok(Some(snapshot))
 }
 
+/// Wipes the cached data **and its metadata**, so a later login cannot resurrect a previous
+/// person's "last synced / revision" numbers on the sign-in screen.
 pub fn clear() {
     let _ = fs::remove_file(config::cache_path());
+    let _ = fs::remove_file(config::config_path());
     let _ = fs::remove_dir_all(config::icons_dir());
 }
 
