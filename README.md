@@ -146,6 +146,11 @@ The API is published on `API_BIND_IP:8090` (default `127.0.0.1` for local testin
 VM's LAN IP — `172.168.50.50` — in production). PostgreSQL has **no** host port; it is
 reachable only from the API container.
 
+If the portal or client gets "connection refused" from another machine, check the bind address
+first — `ss -ltnp | grep 8090` on the VM should show the LAN IP, not `127.0.0.1`. After changing
+`API_BIND_IP` in `.env`, run `docker compose ... up -d` again and confirm the API container is
+**Recreated**, not merely `Running`. Only then look at the host firewall (`sudo ufw status`).
+
 ### Onboarding email
 
 SMTP is configured from **Settings → Onboarding email** in the admin portal. When enabled, a
