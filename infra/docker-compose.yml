@@ -34,8 +34,10 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     ports:
-      # Bind to the LAN address only. Use 127.0.0.1 for local testing.
-      - "${API_BIND_IP:-127.0.0.1}:8090:8090"
+      # Publish on every interface so the LAN address (172.168.50.50) always works. Restrict
+      # access with the host firewall if the VM has more than one network. Using the LAN IP
+      # here previously caused "connection refused" whenever .env still said 127.0.0.1.
+      - "0.0.0.0:8090:8090"
     volumes:
       - ./backups:/backups
 

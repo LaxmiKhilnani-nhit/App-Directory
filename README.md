@@ -142,14 +142,13 @@ docker exec -e PGPASSWORD=restore appdir-restore pg_restore -U postgres -d appdi
 A restored dump boots the API unchanged: `/healthz` answers `database: ok`, the seeded
 settings and the administrator's password both survive, and `/admin/` is served.
 
-The API is published on `API_BIND_IP:8090` (default `127.0.0.1` for local testing; use the
-VM's LAN IP — `172.168.50.50` — in production). PostgreSQL has **no** host port; it is
-reachable only from the API container.
+The API is published on port 8090 on **all** host interfaces (`0.0.0.0:8090:8090`), including
+the VM's LAN address `172.168.50.50`. PostgreSQL has **no** host port; it is reachable only
+from the API container. Restrict 8090 with the host firewall if the VM has more than one network.
 
-If the portal or client gets "connection refused" from another machine, check the bind address
-first — `ss -ltnp | grep 8090` on the VM should show the LAN IP, not `127.0.0.1`. After changing
-`API_BIND_IP` in `.env`, run `docker compose ... up -d` again and confirm the API container is
-**Recreated**, not merely `Running`. Only then look at the host firewall (`sudo ufw status`).
+If a browser on another machine gets "connection refused", first confirm the container was
+**recreated** after pulling a compose change (`docker compose ... up -d --force-recreate api`),
+then check `ss -ltnp | grep 8090` on the VM and finally `sudo ufw status`.
 
 ### Onboarding email
 
