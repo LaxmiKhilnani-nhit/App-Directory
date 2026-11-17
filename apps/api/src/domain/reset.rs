@@ -101,7 +101,11 @@ pub async fn issue(
 
     transaction.commit().await?;
 
-    Ok(IssuedCode { code, expires_at })
+    Ok(IssuedCode {
+        code,
+        expires_at,
+        emailed: false,
+    })
 }
 
 pub async fn dismiss(pool: &PgPool, actor: Uuid, id: Uuid, ip: Option<&str>) -> Result<(), ApiError> {

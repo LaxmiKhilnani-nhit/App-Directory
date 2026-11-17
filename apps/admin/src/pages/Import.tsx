@@ -361,6 +361,12 @@ export function Import() {
                 </Button>
                 {busy ? <Spinner label="" /> : null}
               </div>
+              {busy ? (
+                <p className="admin-inline-hint">
+                  Importing {parsed.rows.length} rows. Large files take several seconds — leave this
+                  page open until the report appears.
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -428,7 +434,8 @@ export function Import() {
                 </div>
               </div>
               <p className="admin-inline-hint">
-                Shown once. Each code is single use and expires in 72 hours.
+                Each code is single use and expires in 72 hours. Codes marked “Emailed” were
+                delivered to the user; the rest must be shared manually.
               </p>
               <div className="admin-table-wrap">
                 <table className="admin-table">
@@ -436,6 +443,7 @@ export function Import() {
                     <tr>
                       <th>Email</th>
                       <th>Code</th>
+                      <th>Delivery</th>
                       <th>Expires</th>
                     </tr>
                   </thead>
@@ -444,6 +452,11 @@ export function Import() {
                       <tr key={entry.email}>
                         <td className="admin-mono">{entry.email}</td>
                         <td className="admin-mono">{entry.code}</td>
+                        <td>
+                          <Badge tone={entry.emailed ? "success" : "neutral"}>
+                            {entry.emailed ? "Emailed" : "Show the user"}
+                          </Badge>
+                        </td>
                         <td className="admin-muted-cell">
                           {new Date(entry.expiresAt).toLocaleString(undefined, {
                             dateStyle: "medium",

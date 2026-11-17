@@ -2,26 +2,42 @@ use std::collections::HashMap;
 
 use axum::{
     extract::{rejection::JsonRejection, State},
+    http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::domain::email::PASSWORD_MASK;
 use crate::domain::models::Setting;
-use crate::domain::{audit, revision, settings as settings_domain};
+use crate::domain::{audit, email, revision, settings as settings_domain};
 use crate::error::{ApiError, ApiResult};
 use crate::http::admin::{pool_of, AdminUser, SuperAdmin};
 use crate::http::extract::ClientIp;
 use crate::http::json_body;
 use crate::state::AppState;
 
+/// The SMTP password is a secret: only ever hand the portal a mask, and treat a submitted
+/// mask as "unchanged" in `update` below.
+async fn masked(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Setting>> {
+    let mut settings = load(pool).await?;
+    for setting in &mut settings {
+        if setting.key == settings_domain::SMTP_PASSWORD
+            && !setting.value.as_str().unwrap_or("").is_empty()
+        {
+            setting.value = json!(PASSWORD_MASK);
+        }
+    }
+    Ok(settings)
+}
+
 pub async fn list(
     State(state): State<AppState>,
     AdminUser(_session): AdminUser,
 ) -> ApiResult<Json<Vec<Setting>>> {
     let pool = pool_of(&state)?;
-    Ok(Json(load(pool).await?))
+    Ok(Json(masked(pool).await?))
 }
 
 async fn load(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Setting>> {
@@ -69,6 +85,34 @@ fn require_string(value: &Value, key: &str, max: usize) -> Result<Value, ApiErro
     }
 
     Ok(json!(text))
+}
+
+fn redact_password(values: &mut HashMap<String, Value>) {
+    if let Some(value) = values.get_mut(settings_domain::SMTP_PASSWORD) {
+        if !value.as_str().unwrap_or("").is_empty() {
+            *value = json!(PASSWORD_MASK);
+        }
+    }
+}
+
+fn require_bool(value: &Value, key: &str) -> Result<Value, ApiError> {
+    value.as_bool().map(|flag| json!(flag)).ok_or_else(|| {
+        ApiError::bad_request("invalid_setting", format!("{key} must be true or false."))
+    })
+}
+
+/// Like `require_string`, but empty values are allowed so an admin can clear a field.
+fn optional_string(value: &Value, key: &str, max: usize) -> Result<Value, ApiError> {
+    let text = value
+        .as_str()
+        .ok_or_else(|| ApiError::bad_request("invalid_setting", format!("{key} must be text.")))?;
+    if text.chars().count() > max {
+        return Err(ApiError::bad_request(
+            "invalid_setting",
+            format!("{key} must be {max} characters or fewer."),
+        ));
+    }
+    Ok(json!(text.trim()))
 }
 
 fn validate_announcement(value: &Value) -> Result<Value, ApiError> {
@@ -145,6 +189,13 @@ fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
         settings_domain::PASSWORD_MIN_LENGTH => require_int(value, key, 8, 200),
         settings_domain::LOGIN_LOCKOUT_ATTEMPTS => require_int(value, key, 0, 100),
         settings_domain::LOGIN_LOCKOUT_MINUTES => require_int(value, key, 1, 1440),
+        settings_domain::SMTP_ENABLED | settings_domain::SMTP_STARTTLS => require_bool(value, key),
+        settings_domain::SMTP_PORT => require_int(value, key, 1, 65535),
+        settings_domain::SMTP_HOST => optional_string(value, key, 253),
+        settings_domain::SMTP_USERNAME => optional_string(value, key, 320),
+        settings_domain::SMTP_PASSWORD => optional_string(value, key, 512),
+        settings_domain::SMTP_FROM_EMAIL => optional_string(value, key, 320),
+        settings_domain::SMTP_FROM_NAME => optional_string(value, key, 120),
         other => Err(ApiError::bad_request(
             "unknown_setting",
             format!("{other} is not a setting this server knows."),
@@ -173,13 +224,18 @@ pub async fn update(
     }
 
     let before = load(pool).await?;
-    let before_map: HashMap<String, Value> = before
+    let mut before_map: HashMap<String, Value> = before
         .into_iter()
         .map(|setting| (setting.key, setting.value))
         .collect();
+    redact_password(&mut before_map);
 
     let mut validated: Vec<(String, Value)> = Vec::with_capacity(incoming.len());
     for (key, value) in incoming {
+        if key == settings_domain::SMTP_PASSWORD && value.as_str() == Some(PASSWORD_MASK) {
+            // The portal sent back the mask: keep the stored password untouched.
+            continue;
+        }
         validated.push((key.clone(), validate(key, value)?));
     }
 
@@ -189,7 +245,8 @@ pub async fn update(
         settings_domain::put_with(&mut *transaction, key, value, Some(session.user.id)).await?;
     }
 
-    let after: HashMap<String, Value> = validated.iter().cloned().collect();
+    let mut after: HashMap<String, Value> = validated.iter().cloned().collect();
+    redact_password(&mut after);
 
     audit::record_tx(
         &mut transaction,
@@ -209,5 +266,26 @@ pub async fn update(
 
     transaction.commit().await?;
 
-    Ok(Json(load(pool).await?))
+    Ok(Json(masked(pool).await?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TestEmailRequest {
+    pub email: String,
+}
+
+/// Lets a super admin verify the relay from the portal without creating a user.
+pub async fn test_email(
+    State(state): State<AppState>,
+    SuperAdmin(_session): SuperAdmin,
+    body: Result<Json<TestEmailRequest>, JsonRejection>,
+) -> ApiResult<StatusCode> {
+    let request = json_body(body)?;
+    let pool = pool_of(&state)?;
+
+    email::test(pool, request.email.trim())
+        .await
+        .map_err(|error| ApiError::bad_request("email_failed", error))?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

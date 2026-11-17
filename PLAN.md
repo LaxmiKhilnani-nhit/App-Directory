@@ -53,7 +53,7 @@ server, group and per-user grants, and an offline-capable client.
 | D5 | Admin portal served by the API process | No Caddy, no extra web server, no CORS |
 | D6 | Favicon + no Caddy + plain HTTP | Per client instruction; revisit with SSL rollout |
 | D7 | Sync = full snapshot per call (~5 KB) plus revision counter | 15 apps makes delta sync pointless complexity |
-| D8 | No SMTP → admin-issued one-time reset codes | No relay available on the network |
+| D8 | SMTP onboarding email (supersedes the no-relay decision) → admin-issued one-time reset codes | No relay available on the network |
 | D9 | Snapshot encrypted locally; token held in Windows Credential Manager | Copying `%LOCALAPPDATA%` must not leak links |
 | D10 | Built-in `All Users` group | Implements "grant to everyone" without a special case |
 | D11 | No "copy link" button in the client | Undermines the directory's purpose |
@@ -491,7 +491,7 @@ Rahul Sharma,rahul@example.com,Finance,Finance;Reporting
 
 Groups semicolon-separated; unknown groups are reported as errors (no silent creation);
 duplicate emails reported; valid rows imported, new users get `must_change_password = true`
-and an onboarding code shown once.
+and an onboarding code shown once, or emailed to the user when SMTP is configured.
 
 ---
 
@@ -567,7 +567,7 @@ Each phase ends with something demonstrable. Estimated effort assumes one develo
 | Passwords in cleartext on LAN | LAN-only bind, lockout, rate limits, no reuse prompts | TLS + cert trust before broad rollout |
 | Unsigned exe triggers SmartScreen | Intune deployment avoids Mark-of-the-Web | Code-signing certificate |
 | Offline revocation gap | 7-day cap, `offline_visible=false` per app, 4 h sync | Shorter grace or per-app TTL if needed |
-| No SMTP | Admin-issued reset codes with 24 h expiry | SMTP relay → true self-service email |
+| SMTP configured | Onboarding codes emailed; portal display remains the fallback | SMTP relay → true self-service email |
 | Favicon fetch fails on authenticated internal apps | Letter-tile fallback with `apps.color` | Custom icon upload UI |
 | VM moves → client rebuild (baked URL) | Single `config.rs` constant | Server discovery / redirect |
 | Admin lockout (sole super_admin forgets password) | CLI `reset-admin` subcommand on the VM | Second super_admin account in practice |

@@ -78,6 +78,17 @@ export function Settings() {
   const [announcementFrom, setAnnouncementFrom] = useState("");
   const [announcementTo, setAnnouncementTo] = useState("");
 
+  const [smtpEnabled, setSmtpEnabled] = useState(false);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpFromEmail, setSmtpFromEmail] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("App Directory");
+  const [smtpStarttls, setSmtpStarttls] = useState(true);
+  const [testAddress, setTestAddress] = useState("");
+  const [testing, setTesting] = useState(false);
+
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +114,15 @@ export function Settings() {
     setAnnouncementLevel(banner?.level ?? "info");
     setAnnouncementFrom(toLocalInput(banner?.activeFrom));
     setAnnouncementTo(toLocalInput(banner?.activeTo));
+
+    setSmtpEnabled(settingValue(settings.data, "smtp_enabled") === true);
+    setSmtpHost(asText(settingValue(settings.data, "smtp_host"), ""));
+    setSmtpPort(asText(settingValue(settings.data, "smtp_port"), "587"));
+    setSmtpUsername(asText(settingValue(settings.data, "smtp_username"), ""));
+    setSmtpPassword(asText(settingValue(settings.data, "smtp_password"), ""));
+    setSmtpFromEmail(asText(settingValue(settings.data, "smtp_from_email"), ""));
+    setSmtpFromName(asText(settingValue(settings.data, "smtp_from_name"), "App Directory"));
+    setSmtpStarttls(settingValue(settings.data, "smtp_starttls") !== false);
     setLoaded(true);
   }, [settings.data, loaded]);
 
@@ -140,6 +160,33 @@ export function Settings() {
       values.announcement = null;
     }
 
+    const port = Number(smtpPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      setError("SMTP port must be a whole number between 1 and 65535.");
+      return;
+    }
+    if (smtpEnabled) {
+      if (!smtpHost.trim() || !smtpFromEmail.trim()) {
+        setError("SMTP host and From address are required when email is enabled.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtpFromEmail.trim())) {
+        setError("Enter a valid From address.");
+        return;
+      }
+    }
+
+    Object.assign(values, {
+      smtp_enabled: smtpEnabled,
+      smtp_host: smtpHost.trim(),
+      smtp_port: port,
+      smtp_username: smtpUsername.trim(),
+      smtp_password: smtpPassword,
+      smtp_from_email: smtpFromEmail.trim(),
+      smtp_from_name: smtpFromName.trim(),
+      smtp_starttls: smtpStarttls,
+    });
+
     setBusy(true);
     try {
       const updated = await adminApi.updateSettings(values);
@@ -149,6 +196,24 @@ export function Settings() {
       setError(errorMessage(cause));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    setError(null);
+    setNotice(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testAddress.trim())) {
+      setError("Enter a valid address to send the test email to.");
+      return;
+    }
+    setTesting(true);
+    try {
+      await adminApi.testEmail(testAddress.trim());
+      setNotice(`Test email sent to ${testAddress.trim()}.`);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -227,6 +292,96 @@ export function Settings() {
                   hint={field.hint}
                 />
               ))}
+            </div>
+          </section>
+
+          <section className="admin-card">
+            <div className="admin-pagehead">
+              <h2 className="admin-card__title">Onboarding email (SMTP)</h2>
+              <Badge tone={smtpEnabled ? "success" : "neutral"}>
+                {smtpEnabled ? "Enabled" : "Off"}
+              </Badge>
+            </div>
+            <p className="admin-inline-hint" style={{ marginTop: "var(--space-2)" }}>
+              When enabled, a new account's one-time onboarding code is emailed to the user. If the
+              server cannot send, the code is still shown in the portal. Codes are never stored in
+              plain text.
+            </p>
+            <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
+              <CheckboxField
+                label="Email onboarding codes to new users"
+                checked={smtpEnabled}
+                onChange={setSmtpEnabled}
+              />
+              {smtpEnabled ? (
+                <>
+                  <div className="admin-form-grid">
+                    <TextField
+                      label="SMTP host"
+                      value={smtpHost}
+                      onChange={(event) => setSmtpHost(event.target.value)}
+                      placeholder="smtp.office365.com"
+                      maxLength={253}
+                    />
+                    <TextField
+                      label="SMTP port"
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={smtpPort}
+                      onChange={(event) => setSmtpPort(event.target.value)}
+                      hint="587 with STARTTLS, or 465 for implicit TLS."
+                    />
+                    <TextField
+                      label="Username"
+                      value={smtpUsername}
+                      onChange={(event) => setSmtpUsername(event.target.value)}
+                      maxLength={320}
+                    />
+                    <TextField
+                      label="Password"
+                      type="password"
+                      value={smtpPassword}
+                      onChange={(event) => setSmtpPassword(event.target.value)}
+                      maxLength={512}
+                      hint="Stored on the server. The portal only ever receives a mask."
+                    />
+                    <TextField
+                      label="From address"
+                      type="email"
+                      value={smtpFromEmail}
+                      onChange={(event) => setSmtpFromEmail(event.target.value)}
+                      maxLength={320}
+                    />
+                    <TextField
+                      label="From name"
+                      value={smtpFromName}
+                      onChange={(event) => setSmtpFromName(event.target.value)}
+                      maxLength={120}
+                    />
+                  </div>
+                  <CheckboxField
+                    label="Use STARTTLS (port 587)"
+                    checked={smtpStarttls}
+                    onChange={setSmtpStarttls}
+                    hint="Turn off only for a local test server."
+                  />
+                  <div className="admin-form-grid">
+                    <TextField
+                      label="Send a test email to"
+                      type="email"
+                      value={testAddress}
+                      onChange={(event) => setTestAddress(event.target.value)}
+                      placeholder="you@company.com"
+                    />
+                    <div style={{ alignSelf: "end" }}>
+                      <Button variant="secondary" onClick={sendTest} disabled={testing}>
+                        {testing ? "Sending…" : "Send test email"}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
           </section>
 

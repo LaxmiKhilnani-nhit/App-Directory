@@ -156,6 +156,8 @@ export interface UserPage {
 export interface IssuedCode {
   code: string;
   expiresAt: string;
+  /** True when the server emailed the code; otherwise the admin must share it. */
+  emailed: boolean;
 }
 
 export interface ResetRequest {
@@ -172,6 +174,7 @@ export interface OnboardingCode {
   email: string;
   code: string;
   expiresAt: string;
+  emailed: boolean;
 }
 
 export interface ImportErrorRow {

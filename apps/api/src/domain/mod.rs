@@ -2,6 +2,7 @@ pub mod apps;
 pub mod audit;
 pub mod auth;
 pub mod de;
+pub mod email;
 pub mod entitlements;
 pub mod groups;
 pub mod icon_fetch;

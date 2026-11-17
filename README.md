@@ -146,6 +146,17 @@ The API is published on `API_BIND_IP:8090` (default `127.0.0.1` for local testin
 VM's LAN IP — `172.168.50.50` — in production). PostgreSQL has **no** host port; it is
 reachable only from the API container.
 
+### Onboarding email
+
+SMTP is configured from **Settings → Onboarding email** in the admin portal. When enabled, a
+new account's one-time onboarding code is emailed immediately; if delivery fails, the code is
+still returned and shown to the administrator, so onboarding never depends on the relay. The
+reset/forgot flow is unchanged — the user still sets a new password on first sign-in.
+
+The SMTP password is stored in the server's `settings` table. It is masked in every API
+response, in the audit log and in the portal, and submitting the mask means "unchanged". Treat
+the mailbox password as a secret and rotate it if it has been shared in plain text.
+
 ## Configuration
 
 Runtime settings for the client are baked at build time in
@@ -267,7 +278,7 @@ portal and the API share an origin and no CORS configuration is needed.
 | Users & access | `/admin/users` | super | profile, role and admin scope, direct grants, onboarding/reset codes, deactivate |
 | CSV import | `/admin/import` | super | paste or upload, column mapping, client-side preview, per-row errors and one-time onboarding codes |
 | Reset queue | `/admin/reset-requests` | super | issue a code or dismiss, filtered by status |
-| Settings | `/admin/settings` | super | app name, sync interval, offline grace, password policy, announcement banner with preview |
+| Settings | `/admin/settings` | super | app name, sync interval, offline grace, password policy, announcement banner, SMTP onboarding email and test send |
 | Audit log | `/admin/audit` | super | filters plus expandable before/after JSON |
 
 `app_admin` accounts only see Dashboard and Apps; every other route redirects to `/admin/apps`,

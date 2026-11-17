@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres};
 use uuid::Uuid;
 
-use crate::domain::{audit, auth, is_unique_violation, revision};
+use crate::domain::{audit, auth, email, is_unique_violation, revision};
 use crate::error::ApiError;
 
 pub const ROLES: [&str; 3] = ["user", "app_admin", "super_admin"];
@@ -117,11 +117,12 @@ pub async fn get(pool: &PgPool, id: Uuid) -> Result<Option<UserDetail>, ApiError
         return Ok(None);
     };
 
-    let group_ids: Vec<Uuid> =
-        sqlx::query_scalar("select group_id from group_members where user_id = $1 order by created_at")
-            .bind(id)
-            .fetch_all(pool)
-            .await?;
+    let group_ids: Vec<Uuid> = sqlx::query_scalar(
+        "select group_id from group_members where user_id = $1 order by created_at",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
 
     let app_ids: Vec<Uuid> =
         sqlx::query_scalar("select app_id from user_apps where user_id = $1 order by created_at")
@@ -627,6 +628,7 @@ pub async fn set_apps(
 pub struct IssuedCode {
     pub code: String,
     pub expires_at: DateTime<Utc>,
+    pub emailed: bool,
 }
 
 pub async fn issue_reset_code(
@@ -670,7 +672,21 @@ pub async fn issue_reset_code(
 
     transaction.commit().await?;
 
-    Ok(IssuedCode { code, expires_at })
+    // Onboarding codes are emailed when SMTP is configured. A failed send is reported, never
+    // hidden: the portal still receives the code and shows it to the administrator.
+    let emailed = if purpose == "onboard" {
+        email::onboarding(pool, &user.name, &user.email, &code, expires_at)
+            .await
+            .emailed()
+    } else {
+        false
+    };
+
+    Ok(IssuedCode {
+        code,
+        expires_at,
+        emailed,
+    })
 }
 
 // ---------------------------------------------------------------- CSV import
@@ -698,6 +714,8 @@ pub struct OnboardingCode {
     pub email: String,
     pub code: String,
     pub expires_at: DateTime<Utc>,
+    /// True when the code was emailed. When false the portal must show it to the admin.
+    pub emailed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -834,6 +852,9 @@ pub async fn import(
         onboarding: Vec::new(),
     };
     let mut seen: HashMap<String, usize> = HashMap::new();
+    // Emails are sent after the transaction commits: never hold a DB transaction open while
+    // waiting on an external SMTP server. Each entry points at its report row.
+    let mut pending_emails: Vec<(usize, String, String, String, DateTime<Utc>)> = Vec::new();
 
     for row in rows {
         if report.errors.len() >= 200 {
@@ -984,10 +1005,13 @@ pub async fn import(
                         .await?;
 
                 report.created += 1;
+                let index = report.onboarding.len();
+                pending_emails.push((index, name.clone(), email.clone(), code.clone(), expires_at));
                 report.onboarding.push(OnboardingCode {
                     email,
                     code,
                     expires_at,
+                    emailed: false,
                 });
             }
         }
@@ -1015,6 +1039,13 @@ pub async fn import(
     }
 
     transaction.commit().await?;
+
+    for (index, name, address, code, expires_at) in pending_emails {
+        let delivered = email::onboarding(pool, &name, &address, &code, expires_at)
+            .await
+            .emailed();
+        report.onboarding[index].emailed = delivered;
+    }
 
     Ok(report)
 }
@@ -1048,7 +1079,10 @@ mod tests {
 
     #[test]
     fn emails_are_lower_cased_and_checked() {
-        assert_eq!(validate_email(" Rahul@Example.COM ").unwrap(), "rahul@example.com");
+        assert_eq!(
+            validate_email(" Rahul@Example.COM ").unwrap(),
+            "rahul@example.com"
+        );
         assert!(validate_email("not-an-email").is_err());
         assert!(validate_email("two words@example.com").is_err());
     }

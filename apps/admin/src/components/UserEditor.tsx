@@ -133,7 +133,11 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
           const issued = await adminApi.issueResetCode(created.id, "onboard");
           setCodePurpose("onboard");
           setCode(issued);
-          setNotice("Account created. Share the onboarding code below.");
+          setNotice(
+            issued.emailed
+              ? "Account created. The onboarding code was emailed to the user."
+              : "Account created. Share the onboarding code below.",
+          );
         } catch (cause) {
           setNotice("Account created, but the onboarding code could not be issued.");
           setError(errorMessage(cause));

@@ -207,6 +207,10 @@ pub fn router() -> Router<AppState> {
             "/api/v1/admin/settings",
             get(settings::list).put(settings::update),
         )
+        .route(
+            "/api/v1/admin/settings/test-email",
+            post(settings::test_email),
+        )
         .route("/api/v1/admin/audit", get(audit_log::list))
 }
 

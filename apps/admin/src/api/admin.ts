@@ -173,6 +173,11 @@ export const adminApi = {
     request<void>(`/api/v1/admin/reset-requests/${id}/dismiss`, { method: "POST" }),
 
   settings: () => request<Setting[]>("/api/v1/admin/settings"),
+  testEmail: (email: string) =>
+    request<void>("/api/v1/admin/settings/test-email", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
   updateSettings: (values: Record<string, unknown>) =>
     request<Setting[]>("/api/v1/admin/settings", {
       method: "PUT",

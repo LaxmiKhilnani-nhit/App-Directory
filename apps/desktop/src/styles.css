@@ -51,9 +51,9 @@
 }
 
 .desktop-topbar__search {
-  flex: 1 1 220px;
+  flex: 0 1 300px;
   min-width: 140px;
-  max-width: 420px;
+  max-width: 300px;
   margin-left: auto;
 }
 
@@ -136,8 +136,31 @@
 
 .desktop-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   gap: var(--space-3);
+}
+
+/* A denser, launcher-style tile: artwork beside the label rather than above it. Scoped to
+   the desktop grid so the shared component keeps its original look in the admin portal. */
+.desktop-grid .ad-tile {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  min-height: 68px;
+  border-radius: var(--radius-md);
+}
+
+.desktop-grid .ad-tile__icon,
+.desktop-grid .ad-tile__letter {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 8px;
+}
+
+.desktop-grid .ad-tile__body {
+  flex: 1 1 auto;
 }
 
 .desktop-footer {

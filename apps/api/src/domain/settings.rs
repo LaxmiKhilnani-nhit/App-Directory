@@ -12,6 +12,14 @@ pub const ANNOUNCEMENT: &str = "announcement";
 pub const PASSWORD_MIN_LENGTH: &str = "password_min_length";
 pub const LOGIN_LOCKOUT_ATTEMPTS: &str = "login_lockout_attempts";
 pub const LOGIN_LOCKOUT_MINUTES: &str = "login_lockout_minutes";
+pub const SMTP_ENABLED: &str = "smtp_enabled";
+pub const SMTP_HOST: &str = "smtp_host";
+pub const SMTP_PORT: &str = "smtp_port";
+pub const SMTP_USERNAME: &str = "smtp_username";
+pub const SMTP_PASSWORD: &str = "smtp_password";
+pub const SMTP_FROM_EMAIL: &str = "smtp_from_email";
+pub const SMTP_FROM_NAME: &str = "smtp_from_name";
+pub const SMTP_STARTTLS: &str = "smtp_starttls";
 
 /// Values inserted on first start. Existing rows are never overwritten, so restarting the
 /// container cannot undo an admin's changes.
@@ -24,6 +32,14 @@ pub fn defaults() -> Vec<(&'static str, Value)> {
         (PASSWORD_MIN_LENGTH, json!(12)),
         (LOGIN_LOCKOUT_ATTEMPTS, json!(5)),
         (LOGIN_LOCKOUT_MINUTES, json!(15)),
+        (SMTP_ENABLED, json!(false)),
+        (SMTP_HOST, json!("")),
+        (SMTP_PORT, json!(587)),
+        (SMTP_USERNAME, json!("")),
+        (SMTP_PASSWORD, json!("")),
+        (SMTP_FROM_EMAIL, json!("")),
+        (SMTP_FROM_NAME, json!("App Directory")),
+        (SMTP_STARTTLS, json!(true)),
     ]
 }
 
@@ -53,12 +69,7 @@ pub async fn get<T: DeserializeOwned>(pool: &PgPool, key: &str) -> anyhow::Resul
     }
 }
 
-pub async fn put(
-    pool: &PgPool,
-    key: &str,
-    value: &Value,
-    actor: Option<Uuid>,
-) -> sqlx::Result<()> {
+pub async fn put(pool: &PgPool, key: &str, value: &Value, actor: Option<Uuid>) -> sqlx::Result<()> {
     put_with(pool, key, value, actor).await
 }
 

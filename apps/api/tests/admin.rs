@@ -14,6 +14,7 @@ use app_directory_api::build_router;
 use app_directory_api::config::Config;
 use app_directory_api::domain::auth;
 use app_directory_api::domain::password;
+use app_directory_api::domain::settings;
 use app_directory_api::state::AppState;
 
 const PASSWORD: &str = "correct-horse-battery";
@@ -178,7 +179,11 @@ async fn create_app(app: &Router, token: &str, name: &str, category: &str) -> Va
     )
     .await;
 
-    assert_eq!(status, axum::http::StatusCode::CREATED, "create app: {body}");
+    assert_eq!(
+        status,
+        axum::http::StatusCode::CREATED,
+        "create app: {body}"
+    );
     body
 }
 
@@ -443,7 +448,11 @@ async fn user_creation_returns_an_onboarding_code_that_logs_in(pool: PgPool) {
         })),
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::CREATED, "create user: {created}");
+    assert_eq!(
+        status,
+        axum::http::StatusCode::CREATED,
+        "create user: {created}"
+    );
     assert_eq!(created["email"], "new.person@example.com");
     assert_eq!(created["hasPassword"], false);
     assert_eq!(created["mustChangePassword"], true);
@@ -623,10 +632,11 @@ async fn settings_are_validated_and_bump_the_revision(pool: PgPool) {
     assert_eq!(status, axum::http::StatusCode::OK, "settings: {body}");
     assert_eq!(revision(&pool).await, 2);
 
-    let stored: Value = sqlx::query_scalar("select value from settings where key = 'sync_interval_hours'")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let stored: Value =
+        sqlx::query_scalar("select value from settings where key = 'sync_interval_hours'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(stored, json!(6));
 
     let (_, payload) = send(&app, "GET", "/api/v1/client/sync", Some(&token), None).await;
@@ -653,7 +663,12 @@ async fn icons_are_uploaded_and_served_with_etags(pool: PgPool) {
         Some("image/png"),
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::OK, "upload: {:?}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        status,
+        axum::http::StatusCode::OK,
+        "upload: {:?}",
+        String::from_utf8_lossy(&body)
+    );
 
     let icon: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(icon["iconSource"], "upload");
@@ -669,7 +684,11 @@ async fn icons_are_uploaded_and_served_with_etags(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "not entitled yet");
+    assert_eq!(
+        status,
+        axum::http::StatusCode::FORBIDDEN,
+        "not entitled yet"
+    );
     let error: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(error["error"]["code"], "not_entitled");
 
@@ -765,10 +784,11 @@ async fn csv_import_reports_rows_and_creates_onboarding_codes(pool: PgPool) {
     assert_eq!(report["created"], 0);
     assert_eq!(report["updated"], 1);
 
-    let name: String = sqlx::query_scalar("select name from users where email = 'rahul@example.com'")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let name: String =
+        sqlx::query_scalar("select name from users where email = 'rahul@example.com'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(name, "Rahul S");
 }
 
@@ -887,6 +907,118 @@ async fn csv_import_accepts_all_users_and_department_groups(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn smtp_settings_are_masked_and_onboarding_never_hides_codes(pool: PgPool) {
+    // `#[sqlx::test]` applies migrations only; the real server seeds defaults at startup.
+    settings::ensure_defaults(&pool)
+        .await
+        .expect("seed settings");
+
+    let admin = insert_user(&pool, "admin@example.com", "super_admin").await;
+    let token = token_for(&pool, admin).await;
+    let app = app(pool.clone());
+
+    // Defaults exist, and the password never leaves the server in plain text.
+    let (_, settings) = send(&app, "GET", "/api/v1/admin/settings", Some(&token), None).await;
+    let keys: Vec<&str> = settings
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["key"].as_str().unwrap())
+        .collect();
+    for key in [
+        "smtp_enabled",
+        "smtp_host",
+        "smtp_port",
+        "smtp_username",
+        "smtp_password",
+        "smtp_from_email",
+        "smtp_from_name",
+        "smtp_starttls",
+    ] {
+        assert!(keys.contains(&key), "missing default setting {key}");
+    }
+
+    let (_, updated) = send(
+        &app,
+        "PUT",
+        "/api/v1/admin/settings",
+        Some(&token),
+        Some(json!({ "values": {
+            "smtp_enabled": true,
+            "smtp_host": "127.0.0.1",
+            "smtp_port": 1,
+            "smtp_username": "mailer@example.com",
+            "smtp_password": "a-very-secret-password",
+            "smtp_from_email": "no-reply@example.com",
+            "smtp_from_name": "IT",
+            "smtp_starttls": false,
+        } })),
+    )
+    .await;
+    let stored = updated
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["key"] == "smtp_password")
+        .unwrap();
+    assert_eq!(
+        stored["value"], "********",
+        "the portal must never see the password"
+    );
+
+    // Submitting the mask back leaves the stored value untouched.
+    let (_, _) = send(
+        &app,
+        "PUT",
+        "/api/v1/admin/settings",
+        Some(&token),
+        Some(json!({ "values": { "smtp_password": "********" } })),
+    )
+    .await;
+    let raw: String =
+        sqlx::query_scalar("select value::text from settings where key = 'smtp_password'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        raw.contains("a-very-secret-password"),
+        "mask submission overwrote the secret: {raw}"
+    );
+
+    // The relay is deliberately unreachable: the import must still create the user, hand back
+    // the code, and only report that delivery failed.
+    let (status, report) = send(
+        &app,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some(&token),
+        Some(json!({ "csv": "name,email,department,groups\nAkash Shah,akash@example.com,IT,\n" })),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{report}");
+    assert_eq!(report["created"], 1, "{report}");
+    assert_eq!(report["errors"].as_array().unwrap().len(), 0, "{report}");
+    let onboarding = &report["onboarding"][0];
+    assert_eq!(
+        onboarding["emailed"], false,
+        "a failed send must not hide the code"
+    );
+    assert!(onboarding["code"].as_str().unwrap().len() >= 8);
+
+    // Test-email fails cleanly with a configuration that cannot be reached.
+    let (status, error) = send(
+        &app,
+        "POST",
+        "/api/v1/admin/settings/test-email",
+        Some(&token),
+        Some(json!({ "email": "admin@example.com" })),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["error"]["code"], "email_failed");
+}
+
+#[sqlx::test]
 async fn app_admin_is_limited_to_its_categories(pool: PgPool) {
     let admin = insert_user(&pool, "admin@example.com", "super_admin").await;
     let scoped = insert_user_with_scope(
@@ -925,7 +1057,14 @@ async fn app_admin_is_limited_to_its_categories(pool: PgPool) {
     assert_eq!(body["error"]["code"], "out_of_scope");
 
     // People and settings are super-admin only.
-    let (status, _) = send(&app, "GET", "/api/v1/admin/users", Some(&scoped_token), None).await;
+    let (status, _) = send(
+        &app,
+        "GET",
+        "/api/v1/admin/users",
+        Some(&scoped_token),
+        None,
+    )
+    .await;
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
 
     let (status, _) = send(
@@ -962,18 +1101,14 @@ async fn super_admin_assigns_app_admin_role_and_scope(pool: PgPool) {
     .await;
     assert_eq!(status, axum::http::StatusCode::OK, "promote: {updated}");
     assert_eq!(updated["role"], "app_admin");
-    assert_eq!(updated["adminScope"]["categories"], json!(["finance", "HR"]));
+    assert_eq!(
+        updated["adminScope"]["categories"],
+        json!(["finance", "HR"])
+    );
 
     // A scope change applies to the next request; sessions reload the user row.
     let person_token = token_for(&pool, person).await;
-    let (status, apps) = send(
-        &app,
-        "GET",
-        "/api/v1/admin/apps",
-        Some(&person_token),
-        None,
-    )
-    .await;
+    let (status, apps) = send(&app, "GET", "/api/v1/admin/apps", Some(&person_token), None).await;
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(apps.as_array().unwrap().len(), 1);
     assert_eq!(apps[0]["name"], "Payroll");
@@ -990,14 +1125,7 @@ async fn super_admin_assigns_app_admin_role_and_scope(pool: PgPool) {
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(demoted["adminScope"], Value::Null);
 
-    let (status, _) = send(
-        &app,
-        "GET",
-        "/api/v1/admin/apps",
-        Some(&person_token),
-        None,
-    )
-    .await;
+    let (status, _) = send(&app, "GET", "/api/v1/admin/apps", Some(&person_token), None).await;
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
 }
 
@@ -1200,7 +1328,14 @@ async fn sync_requires_auth_and_returns_the_revision(pool: PgPool) {
     let (status, _) = send(&app, "GET", "/api/v1/client/sync", None, None).await;
     assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
 
-    let (status, payload) = send(&app, "GET", "/api/v1/client/sync?cursor=5", Some(&token), None).await;
+    let (status, payload) = send(
+        &app,
+        "GET",
+        "/api/v1/client/sync?cursor=5",
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(payload["revision"], 1);
     assert_eq!(payload["user"]["name"], "person@example.com");
