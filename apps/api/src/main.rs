@@ -1,38 +1,10 @@
-mod config;
-mod static_assets;
+use std::net::SocketAddr;
 
-use axum::{extract::State, routing::get, Json, Router};
-use serde::Serialize;
-use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Health {
-    status: &'static str,
-    version: &'static str,
-    app_name: String,
-}
-
-async fn health(State(config): State<Config>) -> Json<Health> {
-    Json(Health {
-        status: "ok",
-        version: env!("CARGO_PKG_VERSION"),
-        app_name: config.app_name,
-    })
-}
-
-fn app(config: Config) -> Router {
-    let admin = static_assets::router(&config);
-
-    Router::new()
-        .route("/api/v1/healthz", get(health))
-        .with_state(config)
-        .merge(admin)
-        .layer(TraceLayer::new_for_http())
-}
+use app_directory_api::config::Config;
+use app_directory_api::state::AppState;
+use app_directory_api::{build_router, db, domain};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,19 +15,32 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::from_env();
-    let addr = format!("{}:{}", config.bind_addr, config.port);
+    let pool = db::connect_and_migrate(&config).await?;
+
+    if let Some(pool) = pool.as_ref() {
+        domain::seed::run(pool, &config).await?;
+    }
+
+    let state = AppState::new(config, pool);
+    let addr = format!("{}:{}", state.config.bind_addr, state.config.port);
 
     tracing::info!(
         bind = %addr,
-        app = %config.app_name,
-        admin_dist = %config.admin_dist.display(),
+        app = %state.config.app_name,
+        admin_dist = %state.config.admin_dist.display(),
+        session_ttl_days = state.config.session_ttl_days,
         "starting App Directory API"
     );
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app(config))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+
+    // Connect info is what gives handlers the client IP for rate limiting and audit rows.
+    axum::serve(
+        listener,
+        build_router(state).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     Ok(())
 }

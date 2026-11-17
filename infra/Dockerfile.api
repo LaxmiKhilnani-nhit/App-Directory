@@ -16,12 +16,12 @@ FROM rust:1-slim-bookworm AS api-build
 WORKDIR /app
 
 # Cache dependency compilation across source-only changes.
-COPY apps/api/Cargo.toml ./
+COPY apps/api/Cargo.toml apps/api/Cargo.lock ./
 RUN mkdir -p src \
  && printf 'fn main() {}\n' > src/main.rs \
  && cargo build --release \
  && rm -rf src
-
+COPY apps/api/migrations ./migrations
 COPY apps/api/src ./src
 RUN touch src/main.rs && cargo build --release
 

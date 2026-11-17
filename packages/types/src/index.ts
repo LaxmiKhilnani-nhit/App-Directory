@@ -14,6 +14,8 @@ export interface SessionUser {
   name: string;
   department: string | null;
   role: Role;
+  /** Limits an `app_admin` to a set of app categories; absent for other roles. */
+  adminScope: { categories?: string[] } | null;
   mustChangePassword: boolean;
 }
 
@@ -21,11 +23,15 @@ export interface LoginResponse {
   token: string;
   expiresAt: string;
   user: SessionUser;
+  mustChangePassword: boolean;
 }
 
 export interface Announcement {
   text: string;
   level: "info" | "warning" | "critical";
+  /** ISO-8601 window; absent or null means always visible. */
+  activeFrom?: string | null;
+  activeTo?: string | null;
 }
 
 export interface AppTile {
@@ -47,6 +53,8 @@ export interface SyncPayload {
   serverTime: string;
   offlineValidUntil: string;
   snapshotDays: number;
+  /** Background refresh cadence the server wants the client to use. */
+  syncIntervalHours: number;
   announcement: Announcement | null;
   user: Pick<SessionUser, "name" | "department" | "mustChangePassword">;
   apps: AppTile[];
@@ -63,4 +71,146 @@ export interface HealthResponse {
   status: "ok";
   version: string;
   appName: string;
+}
+
+// ---------------------------------------------------------------- admin portal
+
+export interface AdminMe {
+  user: SessionUser;
+  isSuperAdmin: boolean;
+}
+
+export interface Stats {
+  users: number;
+  activeUsers: number;
+  apps: number;
+  enabledApps: number;
+  groups: number;
+  openResetRequests: number;
+  loginsToday: number;
+  revision: number;
+}
+
+export interface AdminApp {
+  id: string;
+  name: string;
+  url: string;
+  description: string | null;
+  category: string | null;
+  color: string | null;
+  sortOrder: number;
+  isEnabled: boolean;
+  offlineVisible: boolean;
+  iconSource: string;
+  iconMime: string | null;
+  iconFetchedAt: string | null;
+  iconEtag: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  groupIds: string[];
+  userIds: string[];
+}
+
+export interface AdminGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  autoDepartment: string | null;
+  isAllUsers: boolean;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  appCount: number;
+}
+
+export interface GroupDetail extends AdminGroup {
+  userIds: string[];
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  department: string | null;
+  role: Role;
+  adminScope: { categories?: string[] } | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hasPassword: boolean;
+}
+
+export interface UserDetail extends AdminUser {
+  groupIds: string[];
+  appIds: string[];
+}
+
+export interface UserPage {
+  users: AdminUser[];
+  total: number;
+}
+
+export interface IssuedCode {
+  code: string;
+  expiresAt: string;
+  /** True when the server emailed the code; otherwise the admin must share it. */
+  emailed: boolean;
+}
+
+export interface ResetRequest {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  status: "open" | "issued" | "dismissed";
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface OnboardingCode {
+  email: string;
+  code: string;
+  expiresAt: string;
+  emailed: boolean;
+}
+
+export interface ImportErrorRow {
+  line: number;
+  email: string | null;
+  message: string;
+}
+
+export interface ImportReport {
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: ImportErrorRow[];
+  onboarding: OnboardingCode[];
+}
+
+export interface AuditRow {
+  id: number;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  before: unknown;
+  after: unknown;
+  createdAt: string;
+}
+
+export interface AuditPage {
+  entries: AuditRow[];
+  total: number;
+}
+
+export interface Setting {
+  key: string;
+  value: unknown;
+  updatedAt: string;
+  updatedBy: string | null;
 }

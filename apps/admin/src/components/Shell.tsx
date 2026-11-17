@@ -1,12 +1,22 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@app-directory/ui";
+import { useAuth } from "../auth";
 
-const NAV = [
+interface NavItem {
+  to: string;
+  label: string;
+  superOnly?: boolean;
+}
+
+const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/apps", label: "Apps" },
-  { to: "/groups", label: "Groups" },
-  { to: "/users", label: "Users" },
-  { to: "/settings", label: "Settings" },
-  { to: "/audit", label: "Audit log" },
+  { to: "/groups", label: "Groups", superOnly: true },
+  { to: "/users", label: "Users", superOnly: true },
+  { to: "/import", label: "CSV import", superOnly: true },
+  { to: "/reset-requests", label: "Reset queue", superOnly: true },
+  { to: "/settings", label: "Settings", superOnly: true },
+  { to: "/audit", label: "Audit log", superOnly: true },
 ];
 
 const TITLES: Record<string, string> = {
@@ -14,12 +24,30 @@ const TITLES: Record<string, string> = {
   "/apps": "Applications",
   "/groups": "Groups",
   "/users": "Users & access",
+  "/import": "CSV import",
+  "/reset-requests": "Password reset requests",
   "/settings": "Settings",
   "/audit": "Audit log",
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  super_admin: "Super admin",
+  app_admin: "App admin",
+  user: "User",
+};
+
 export function Shell() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const isSuper = user?.role === "super_admin";
+
+  const items = NAV.filter((item) => !item.superOnly || isSuper);
+
+  async function onSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="admin-shell">
@@ -31,7 +59,7 @@ export function Shell() {
           </div>
         </div>
         <nav className="admin-nav">
-          {NAV.map((item) => (
+          {items.map((item) => (
             <NavLink key={item.to} to={item.to}>
               {item.label}
             </NavLink>
@@ -41,7 +69,17 @@ export function Shell() {
       <div className="admin-main">
         <header className="admin-topbar">
           <h1 className="admin-topbar__title">{TITLES[pathname] ?? "App Directory"}</h1>
-          <span className="ad-badge">Phase 0</span>
+          <div className="admin-user">
+            <span className="admin-user__name" title={user?.email}>
+              {user?.name}
+            </span>
+            <span className="ad-badge ad-badge--accent">
+              {ROLE_LABEL[user?.role ?? "user"] ?? user?.role}
+            </span>
+            <Button variant="ghost" size="sm" onClick={onSignOut}>
+              Sign out
+            </Button>
+          </div>
         </header>
         <main className="admin-content">
           <Outlet />

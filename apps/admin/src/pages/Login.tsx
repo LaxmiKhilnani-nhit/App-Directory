@@ -1,10 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@app-directory/ui";
+import { Navigate, useNavigate } from "react-router-dom";
+import { Button, Spinner } from "@app-directory/ui";
 import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth";
 
 type ServerState = "checking" | "reachable" | "unreachable";
 
 export function Login() {
+  const { user, loading, signIn } = useAuth();
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [server, setServer] = useState<ServerState>("checking");
@@ -29,24 +34,40 @@ export function Login() {
     };
   }, []);
 
+  if (loading) {
+    return (
+      <div className="admin-loading">
+        <Spinner label="Checking your session…" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to={user.mustChangePassword ? "/change-password" : "/dashboard"} replace />;
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
+
     try {
-      const session = await api.login(email, password);
-      setMessage(`Signed in as ${session.user.name}. Session handling lands in Phase 2.`);
+      const signedIn = await signIn(email.trim(), password);
+      navigate(signedIn.mustChangePassword ? "/change-password" : "/dashboard", { replace: true });
     } catch (error) {
       if (error instanceof ApiError) {
         setMessage(
-          error.status === 404
-            ? "Auth endpoint not implemented yet (Phase 2)."
-            : `${error.code}: ${error.message}`,
+          error.code === "account_locked" || error.code === "account_inactive"
+            ? error.message
+            : error.code === "invalid_credentials"
+              ? "Email or password is incorrect."
+              : error.code === "network_error"
+                ? "Could not reach the server. Check that the API is running."
+                : `${error.code}: ${error.message}`,
         );
       } else {
         setMessage("Could not reach the server.");
       }
-    } finally {
       setBusy(false);
     }
   }
@@ -67,6 +88,7 @@ export function Login() {
             autoComplete="username"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            autoFocus
             required
           />
         </div>
@@ -93,13 +115,15 @@ export function Login() {
           </div>
         ) : null}
 
-        {server === "reachable" ? (
-          <div className="admin-notice">
-            Server online{version ? ` · v${version}` : ""}. Authentication is wired up in Phase 2.
-          </div>
+        {server === "reachable" && !message ? (
+          <div className="admin-notice">Server online{version ? ` · v${version}` : ""}</div>
         ) : null}
 
-        {message ? <div className="admin-notice">{message}</div> : null}
+        {message ? <div className="admin-notice admin-notice--danger">{message}</div> : null}
+
+        <p className="admin-muted" style={{ fontSize: 12.5 }}>
+          Forgotten your password? Ask IT for a reset code.
+        </p>
       </form>
     </div>
   );
