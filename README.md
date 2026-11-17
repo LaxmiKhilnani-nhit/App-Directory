@@ -163,9 +163,16 @@ the mailbox password as a secret and rotate it if it has been shared in plain te
 
 ## Configuration
 
-Runtime settings for the client are baked at build time in
-`apps/desktop/src-tauri/src/config.rs` (`DEFAULT_API_BASE_URL`). Set `APPDIR_API_BASE` to
-override during local development.
+Runtime settings for the client default to `http://172.168.50.50:8090` (baked at build time in
+`apps/desktop/src-tauri/src/config.rs`). To repoint an installed client without rebuilding, put
+the new base URL in `%LOCALAPPDATA%\AppDirectory\server.txt`, e.g.:
+
+```
+http://172.168.50.50:8090
+```
+
+`APPDIR_API_BASE` in the process environment takes precedence; both are read at startup and the
+effective URL is shown on the sign-in screen.
 
 Server environment variables are documented in `.env.example`. Secrets live in `.env`, which
 is gitignored.
