@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod download;
 pub mod extract;
 pub mod health;
 pub mod icons;
@@ -19,6 +20,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .merge(health::router())
+        .route("/download/app-directory.exe", get(download::get))
         .merge(admin::router())
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))

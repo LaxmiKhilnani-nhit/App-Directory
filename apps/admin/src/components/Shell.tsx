@@ -64,6 +64,9 @@ export function Shell() {
               {item.label}
             </NavLink>
           ))}
+          <a href="/download/app-directory.exe" className="admin-nav__download">
+            Download client
+          </a>
         </nav>
       </aside>
       <div className="admin-main">

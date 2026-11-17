@@ -40,6 +40,9 @@ services:
       - "0.0.0.0:8090:8090"
     volumes:
       - ./backups:/backups
+      # Portable Windows client, served at /download/app-directory.exe. Place the .exe in
+      # ./release on the server; no image rebuild is needed to publish a new client.
+      - ../release:/app/client:ro
 
 volumes:
   pgdata:

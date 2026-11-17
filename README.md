@@ -150,6 +150,21 @@ If a browser on another machine gets "connection refused", first confirm the con
 **recreated** after pulling a compose change (`docker compose ... up -d --force-recreate api`),
 then check `ss -ltnp | grep 8090` on the VM and finally `sudo ufw status`.
 
+### Client download from the server
+
+Place the built Windows client at `<repo>/release/App Directory.exe` on the server, then
+recreate the API container so the folder is mounted:
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env up -d --force-recreate api
+```
+
+Staff can then download it from `http://172.168.50.50:8090/download/app-directory.exe`, and
+there is a **Download client** link in the admin portal sidebar. No API-image rebuild is needed
+to publish a new client version — just replace the file in `release/`.
+
+The Linux server never builds the exe; it is produced on Windows with `pnpm package:desktop`.
+
 ### Onboarding email
 
 SMTP is configured from **Settings → Onboarding email** in the admin portal. When enabled, a
