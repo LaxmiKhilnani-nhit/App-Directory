@@ -25,6 +25,7 @@ logs/
 release/
 backups/*.sql.gz
 backups/*.dump
+infra/backups/*.dump
 
 # Editors / OS
 .vscode/*

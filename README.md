@@ -92,6 +92,9 @@ $env:APPDIR_E2E_PASSWORD = "<value from .env>"
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -- --ignored
 ```
 
+Add `APPDIR_E2E_KEEP=1` to leave the token and encrypted cache in `%LOCALAPPDATA%\AppDirectory`
+so a packaged exe can be launched offline against them.
+
 ### Portable client (single exe)
 
 ```powershell
@@ -112,6 +115,32 @@ docker compose -f infra/docker-compose.yml --env-file .env up -d --build
 
 Compose reads `.env` from the compose file's directory, so `--env-file .env` is required when
 running from the repo root (or `--env-file ../.env` from inside `infra/`).
+
+### Backups
+
+```powershell
+.\infra\scripts\backup-db.ps1            # writes infra\backups\appdir-<timestamp>.dump
+.\infra\scripts\backup-db.ps1 -KeepDays 14
+```
+
+The script takes a `pg_dump` in custom format through the running container and prunes
+anything older than 30 days. PostgreSQL compresses the custom format, so no gzip step is
+needed. Schedule it on the VM host with Task Scheduler:
+
+```powershell
+schtasks /create /tn "App Directory backup" /sc daily /st 01:00 /tr "powershell -ExecutionPolicy Bypass -File <repo>\infra\scripts\backup-db.ps1"
+```
+
+To restore into a scratch database (verified during the pre-rollout pass):
+
+```powershell
+docker run -d --name appdir-restore -e POSTGRES_PASSWORD=restore -e POSTGRES_USER=postgres -e POSTGRES_DB=appdir postgres:16-alpine
+docker cp infra\backups\appdir-<timestamp>.dump appdir-restore:/tmp/restore.dump
+docker exec -e PGPASSWORD=restore appdir-restore pg_restore -U postgres -d appdir --no-owner --no-privileges /tmp/restore.dump
+```
+
+A restored dump boots the API unchanged: `/healthz` answers `database: ok`, the seeded
+settings and the administrator's password both survive, and `/admin/` is served.
 
 The API is published on `API_BIND_IP:8090` (default `127.0.0.1` for local testing; use the
 VM's LAN IP — `172.168.50.50` — in production). PostgreSQL has **no** host port; it is
@@ -268,6 +297,26 @@ The client is a single portable `.exe` that installs nothing and keeps its state
   until `offline_valid_until`; after that the login screen reports when the last sync happened.
 - Keyboard: `Ctrl+F` search, `Enter` opens the first match, `Esc` clears.
 - `must_change_password` routes the user to the change-password screen before the grid.
+
+## Pre-rollout checks (2026-11-17)
+
+Measured against the dev stack with the packaged exe before the 400-user rollout:
+
+| Check | Result |
+|---|---|
+| CSV import, 400 new users plus 10 bad rows | 400 created, 10 row errors, ~13 s |
+| Users list at 400 accounts | 12 ms |
+| User search | 10 ms |
+| Group membership write | 16 ms |
+| One group grant | ~9 ms |
+| `/client/sync` for a user with 60 apps | 18.5 kB, 7-16 ms |
+| Offline cold start, server stopped | window opens, `cache.bin` left untouched |
+
+Two defects the pass turned up, both fixed: the CSV import rejected `All Users` and
+auto-by-department groups as unknown names, and the grant endpoints that replace a whole
+collection silently treated a mistyped field as "empty" instead of rejecting it. A 400-row
+import takes roughly 13 seconds, so day one should be started from the portal and allowed to
+finish.
 
 ## Build status
 

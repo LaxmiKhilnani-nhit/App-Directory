@@ -815,10 +815,12 @@ pub async fn import(
 
     let mut transaction = pool.begin().await?;
 
-    let group_rows: Vec<(Uuid, String)> =
-        sqlx::query_as("select id, name from groups where not is_all_users and auto_department is null")
-            .fetch_all(&mut *transaction)
-            .await?;
+    // Every group the admin portal offers in its picker is valid here too: a plain group, the
+    // built-in All Users group, and an auto-by-department group. Names are matched
+    // case-insensitively, so "all users" and "All Users" both work.
+    let group_rows: Vec<(Uuid, String)> = sqlx::query_as("select id, name from groups")
+        .fetch_all(&mut *transaction)
+        .await?;
     let group_by_name: HashMap<String, Uuid> = group_rows
         .into_iter()
         .map(|(id, name)| (name.to_lowercase(), id))

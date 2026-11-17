@@ -363,6 +363,14 @@ mod live {
         assert_eq!(failure.code, "network_error");
 
         api.logout(&token).await.ok();
+
+        // `APPDIR_E2E_KEEP=1` leaves the token and cache in place so a packaged exe can be
+        // launched offline against them. Without it the test cleans up after itself.
+        if std::env::var("APPDIR_E2E_KEEP").is_ok() {
+            eprintln!("APPDIR_E2E_KEEP is set: token and cache left in place");
+            return;
+        }
+
         cache::clear();
         credentials::clear_token().expect("clear token");
     }

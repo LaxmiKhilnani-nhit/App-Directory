@@ -94,8 +94,10 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Replaces the whole membership. Unknown fields are rejected so a mistyped body cannot
+/// silently clear the group (PLAN.md §5).
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MembersRequest {
     #[serde(default)]
     pub user_ids: Vec<Uuid>,

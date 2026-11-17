@@ -196,8 +196,10 @@ pub async fn refetch_icon(
     Ok(Json(app))
 }
 
+/// Replaces every group grant on the app; unknown fields are rejected rather than ignored
+/// so a malformed body cannot quietly drop grants (PLAN.md §5).
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GroupGrants {
     #[serde(default)]
     pub group_ids: Vec<Uuid>,

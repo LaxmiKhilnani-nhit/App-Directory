@@ -773,6 +773,120 @@ async fn csv_import_reports_rows_and_creates_onboarding_codes(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn grant_updates_reject_unknown_fields(pool: PgPool) {
+    // The "set the whole collection" endpoints must refuse a body they do not understand:
+    // silently reading it as an empty list would wipe the grants.
+    let admin = insert_user(&pool, "admin@example.com", "super_admin").await;
+    let token = token_for(&pool, admin).await;
+    let app = app(pool.clone());
+
+    let member = insert_user(&pool, "member@example.com", "user").await;
+    let group_id: Uuid = {
+        let (status, created) = send(
+            &app,
+            "POST",
+            "/api/v1/admin/groups",
+            Some(&token),
+            Some(json!({ "name": "Reporting" })),
+        )
+        .await;
+        assert_eq!(status, axum::http::StatusCode::CREATED, "{created}");
+        Uuid::parse_str(created["id"].as_str().unwrap()).unwrap()
+    };
+
+    let (status, _) = send(
+        &app,
+        "PUT",
+        &format!("/api/v1/admin/groups/{group_id}/members"),
+        Some(&token),
+        Some(json!({ "userIds": [member] })),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+
+    let (status, error) = send(
+        &app,
+        "PUT",
+        &format!("/api/v1/admin/groups/{group_id}/members"),
+        Some(&token),
+        Some(json!({ "memberIds": [member] })),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["error"]["code"], "invalid_request");
+
+    let members: i64 = sqlx::query_scalar("select count(*) from group_members where group_id = $1")
+        .bind(group_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(members, 1, "the rejected request must not clear membership");
+}
+
+#[sqlx::test]
+async fn csv_import_accepts_all_users_and_department_groups(pool: PgPool) {
+    let admin = insert_user(&pool, "admin@example.com", "super_admin").await;
+    let token = token_for(&pool, admin).await;
+    let app = app(pool.clone());
+
+    // `#[sqlx::test]` applies migrations only, so reproduce what `seed::run` creates at
+    // startup: the built-in All Users group.
+    sqlx::query("insert into groups (name, is_all_users) values ('All Users', true)")
+        .execute(&pool)
+        .await
+        .expect("seed the All Users group");
+
+    // The other group kind an admin sees in the picker: auto-by-department.
+    send(
+        &app,
+        "POST",
+        "/api/v1/admin/groups",
+        Some(&token),
+        Some(json!({ "name": "Finance desk", "autoDepartment": "Finance" })),
+    )
+    .await;
+
+    let csv = "name,email,department,groups\n\
+               Priya Nair,priya@example.com,Finance,All Users;Finance desk\n\
+               Omar Farouk,omar@example.com,Finance,all users\n";
+
+    let (status, report) = send(
+        &app,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some(&token),
+        Some(json!({ "csv": csv })),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "import: {report}");
+    assert_eq!(report["errors"].as_array().unwrap().len(), 0, "{report}");
+    assert_eq!(report["created"], 2, "{report}");
+
+    // Priya is in both All Users and the department group; Omar only in All Users.
+    let memberships: i64 = sqlx::query_scalar(
+        "select count(*) from group_members gm
+            join users u on u.id = gm.user_id
+            join groups g on g.id = gm.group_id
+          where u.email in ('priya@example.com', 'omar@example.com')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(memberships, 3);
+
+    let all_users: i64 = sqlx::query_scalar(
+        "select count(*) from group_members gm
+            join users u on u.id = gm.user_id
+            join groups g on g.id = gm.group_id
+          where g.is_all_users and u.email = 'omar@example.com'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(all_users, 1, "a lowercase group name should still resolve");
+}
+
+#[sqlx::test]
 async fn app_admin_is_limited_to_its_categories(pool: PgPool) {
     let admin = insert_user(&pool, "admin@example.com", "super_admin").await;
     let scoped = insert_user_with_scope(

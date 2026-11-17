@@ -129,8 +129,9 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Replaces every app granted directly to the user; see `GroupGrants` in `apps.rs`.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppGrants {
     #[serde(default)]
     pub app_ids: Vec<Uuid>,
