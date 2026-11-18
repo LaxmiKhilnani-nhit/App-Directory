@@ -22,7 +22,8 @@ apps/api/target/
 # Local runtime state
 *.log
 logs/
-release/
+release/*
+!release/App Directory.exe
 backups/*.sql.gz
 backups/*.dump
 infra/backups/*.dump
