@@ -86,6 +86,11 @@ export function Settings() {
   const [smtpFromEmail, setSmtpFromEmail] = useState("");
   const [smtpFromName, setSmtpFromName] = useState("App Directory");
   const [smtpStarttls, setSmtpStarttls] = useState(true);
+
+  const [updateEnabled, setUpdateEnabled] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateSha256, setUpdateSha256] = useState("");
+  const [updateUrl, setUpdateUrl] = useState("");
   const [testAddress, setTestAddress] = useState("");
   const [testing, setTesting] = useState(false);
 
@@ -123,6 +128,11 @@ export function Settings() {
     setSmtpFromEmail(asText(settingValue(settings.data, "smtp_from_email"), ""));
     setSmtpFromName(asText(settingValue(settings.data, "smtp_from_name"), "App Directory"));
     setSmtpStarttls(settingValue(settings.data, "smtp_starttls") !== false);
+
+    setUpdateEnabled(settingValue(settings.data, "update_enabled") === 1);
+    setUpdateVersion(asText(settingValue(settings.data, "update_version"), ""));
+    setUpdateSha256(asText(settingValue(settings.data, "update_sha256"), ""));
+    setUpdateUrl(asText(settingValue(settings.data, "update_url"), ""));
     setLoaded(true);
   }, [settings.data, loaded]);
 
@@ -185,6 +195,10 @@ export function Settings() {
       smtp_from_email: smtpFromEmail.trim(),
       smtp_from_name: smtpFromName.trim(),
       smtp_starttls: smtpStarttls,
+      update_enabled: updateEnabled ? 1 : 0,
+      update_version: updateVersion.trim(),
+      update_sha256: updateSha256.trim(),
+      update_url: updateUrl.trim(),
     });
 
     setBusy(true);
@@ -382,6 +396,51 @@ export function Settings() {
                   </div>
                 </>
               ) : null}
+            </div>
+          </section>
+
+          <section className="admin-card">
+            <div className="admin-pagehead">
+              <h2 className="admin-card__title">Client auto-update</h2>
+              <Badge tone={updateEnabled ? "success" : "neutral"}>
+                {updateEnabled ? "Enabled" : "Off"}
+              </Badge>
+            </div>
+            <p className="admin-inline-hint" style={{ marginTop: "var(--space-2)" }}>
+              With the flag on, clients show an "Update now" link when their version is older
+              than the published version. Place the new exe in the server's <code>release/</code>{" "}
+              folder and enter its SHA-256 checksum.
+            </p>
+            <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
+              <CheckboxField
+                label="Offer the published update to clients"
+                checked={updateEnabled}
+                onChange={setUpdateEnabled}
+              />
+              <div className="admin-form-grid">
+                <TextField
+                  label="Published version"
+                  value={updateVersion}
+                  onChange={(event) => setUpdateVersion(event.target.value)}
+                  placeholder="0.2.0"
+                  maxLength={40}
+                />
+                <TextField
+                  label="Download URL (optional)"
+                  value={updateUrl}
+                  onChange={(event) => setUpdateUrl(event.target.value)}
+                  placeholder="/download/app-directory.exe"
+                  maxLength={300}
+                />
+              </div>
+              <TextField
+                label="SHA-256 checksum"
+                value={updateSha256}
+                onChange={(event) => setUpdateSha256(event.target.value)}
+                placeholder="64 hex characters"
+                maxLength={64}
+                hint="Leave empty only if you trust the download endpoint absolutely."
+              />
             </div>
           </section>
 

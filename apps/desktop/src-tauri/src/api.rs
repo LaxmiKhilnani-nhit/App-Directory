@@ -1,12 +1,15 @@
 //! Wire types and the small HTTP layer the desktop client needs.
 //!
-//! This deliberately mirrors `apps/api/src/http/sync.rs`; keep the two in step when the
-//! payload changes. Only the fields the client reads are declared.
+//! There are no passwords, tokens or sessions: every request carries the current Windows
+//! identity in `X-Windows-Identity`, and the server resolves entitlements from its CSV store.
 
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+
+use crate::identity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,18 +56,18 @@ pub struct SessionUser {
     pub must_change_password: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoginResponse {
-    pub token: String,
-    pub user: SessionUser,
-    pub must_change_password: bool,
+pub struct UpdateInfo {
+    pub available: bool,
+    pub version: String,
+    pub sha256: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
-    /// Stable machine code: `network_error`, `unauthenticated`, or the API's own code.
     pub code: String,
     pub message: String,
 }
@@ -84,10 +87,10 @@ impl CommandError {
         )
     }
 
-    pub fn unauthenticated() -> Self {
+    pub fn unknown_user() -> Self {
         Self::new(
-            "unauthenticated",
-            "Your session has expired. Please sign in again.",
+            "unknown_user",
+            "Your Windows account is not in the App Directory. Contact IT.",
         )
     }
 }
@@ -110,9 +113,15 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn new(base: String) -> Self {
+        let mut headers = HeaderMap::new();
+        if let Ok(value) = HeaderValue::from_str(&identity::windows_identity()) {
+            headers.insert("x-windows-identity", value);
+        }
+
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(20))
             .user_agent(format!("AppDirectory/{}", env!("CARGO_PKG_VERSION")))
+            .default_headers(headers)
             .build()
             .expect("HTTP client");
 
@@ -132,17 +141,13 @@ impl ApiClient {
             Some(limit) => request.timeout(limit),
             None => request,
         };
-
         request.send().await.map_err(CommandError::network)
     }
 
     fn failure(status: reqwest::StatusCode, body: &str) -> CommandError {
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            return CommandError::unauthenticated();
-        }
-
         let parsed: Option<ErrorEnvelope> = serde_json::from_str(body).ok();
         match parsed {
+            Some(envelope) if envelope.error.code == "unknown_user" => CommandError::unknown_user(),
             Some(envelope) => CommandError::new(envelope.error.code, envelope.error.message),
             None => CommandError::new(
                 "server_error",
@@ -151,36 +156,10 @@ impl ApiClient {
         }
     }
 
-    pub async fn login(&self, email: &str, password: &str) -> Result<LoginResponse, CommandError> {
+    pub async fn session_user(&self, timeout: Duration) -> Result<SessionUser, CommandError> {
         let response = self
             .send(
-                self.http
-                    .post(self.url("/api/v1/auth/login"))
-                    .json(&serde_json::json!({ "email": email, "password": password })),
-                None,
-            )
-            .await?;
-
-        let status = response.status();
-        let body = response.text().await.map_err(CommandError::network)?;
-        if !status.is_success() {
-            return Err(Self::failure(status, &body));
-        }
-
-        serde_json::from_str(&body)
-            .map_err(|error| CommandError::new("invalid_response", error.to_string()))
-    }
-
-    pub async fn session_user(
-        &self,
-        token: &str,
-        timeout: Duration,
-    ) -> Result<SessionUser, CommandError> {
-        let response = self
-            .send(
-                self.http
-                    .get(self.url("/api/v1/auth/me"))
-                    .bearer_auth(token),
+                self.http.get(self.url("/api/v1/auth/me")),
                 Some(timeout),
             )
             .await?;
@@ -195,13 +174,58 @@ impl ApiClient {
             .map_err(|error| CommandError::new("invalid_response", error.to_string()))
     }
 
-    pub async fn sync(&self, token: &str) -> Result<SyncPayload, CommandError> {
+    pub async fn sync(&self) -> Result<SyncPayload, CommandError> {
+        let response = self
+            .send(self.http.get(self.url("/api/v1/client/sync")), None)
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await.map_err(CommandError::network)?;
+        if !status.is_success() {
+            return Err(Self::failure(status, &body));
+        }
+
+        serde_json::from_str(&body)
+            .map_err(|error| CommandError::new("invalid_response", error.to_string()))
+    }
+
+    pub async fn icon(
+        &self,
+        path: &str,
+        etag: Option<&str>,
+    ) -> Result<Option<Vec<u8>>, CommandError> {
+        let mut request = self.http.get(self.url(path));
+        if let Some(etag) = etag {
+            request = request.header(reqwest::header::IF_NONE_MATCH, etag);
+        }
+
+        let response = self
+            .send(request, Some(Duration::from_secs(15)))
+            .await?;
+        let status = response.status();
+
+        if status == reqwest::StatusCode::NOT_MODIFIED {
+            return Ok(None);
+        }
+        if status.is_success() {
+            let bytes = response.bytes().await.map_err(CommandError::network)?;
+            return Ok(Some(bytes.to_vec()));
+        }
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        Err(Self::failure(
+            status,
+            &response.text().await.unwrap_or_default(),
+        ))
+    }
+
+    pub async fn update_info(&self) -> Result<UpdateInfo, CommandError> {
         let response = self
             .send(
-                self.http
-                    .get(self.url("/api/v1/client/sync"))
-                    .bearer_auth(token),
-                None,
+                self.http.get(self.url("/api/v1/client/update")),
+                Some(Duration::from_secs(10)),
             )
             .await?;
 
@@ -215,138 +239,28 @@ impl ApiClient {
             .map_err(|error| CommandError::new("invalid_response", error.to_string()))
     }
 
-    pub async fn logout(&self, token: &str) -> Result<(), CommandError> {
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>, CommandError> {
+        let target = if url.starts_with("http://") || url.starts_with("https://") {
+            url.to_string()
+        } else {
+            self.url(url)
+        };
+
         let response = self
-            .send(
-                self.http
-                    .post(self.url("/api/v1/auth/logout"))
-                    .bearer_auth(token),
-                Some(Duration::from_secs(8)),
-            )
+            .send(self.http.get(&target), Some(Duration::from_secs(120)))
             .await?;
-
-        if response.status().is_success() || response.status() == reqwest::StatusCode::UNAUTHORIZED
-        {
-            return Ok(());
-        }
-
-        Err(Self::failure(
-            response.status(),
-            &response.text().await.unwrap_or_default(),
-        ))
-    }
-
-    pub async fn change_password(
-        &self,
-        token: &str,
-        current_password: &str,
-        new_password: &str,
-    ) -> Result<(), CommandError> {
-        let response = self
-            .send(
-                self.http
-                    .post(self.url("/api/v1/auth/change-password"))
-                    .bearer_auth(token)
-                    .json(&serde_json::json!({
-                        "currentPassword": current_password,
-                        "newPassword": new_password,
-                    })),
-                None,
-            )
-            .await?;
-
-        if response.status().is_success() {
-            return Ok(());
-        }
-
-        Err(Self::failure(
-            response.status(),
-            &response.text().await.unwrap_or_default(),
-        ))
-    }
-
-    /// Always `202` for known and unknown addresses, so the UI copy stays neutral.
-    pub async fn request_reset(&self, email: &str) -> Result<(), CommandError> {
-        let response = self
-            .send(
-                self.http
-                    .post(self.url("/api/v1/auth/forgot"))
-                    .json(&serde_json::json!({ "email": email })),
-                None,
-            )
-            .await?;
-
-        if response.status().is_success() {
-            return Ok(());
-        }
-
-        Err(Self::failure(
-            response.status(),
-            &response.text().await.unwrap_or_default(),
-        ))
-    }
-
-    pub async fn reset_password(
-        &self,
-        email: &str,
-        code: &str,
-        new_password: &str,
-    ) -> Result<(), CommandError> {
-        let response = self
-            .send(
-                self.http
-                    .post(self.url("/api/v1/auth/reset"))
-                    .json(&serde_json::json!({
-                        "email": email,
-                        "code": code,
-                        "newPassword": new_password,
-                    })),
-                None,
-            )
-            .await?;
-
-        if response.status().is_success() {
-            return Ok(());
-        }
-
-        Err(Self::failure(
-            response.status(),
-            &response.text().await.unwrap_or_default(),
-        ))
-    }
-
-    /// `Ok(None)` means the stored icon is still current (the server answered `304`).
-    pub async fn icon(
-        &self,
-        token: &str,
-        path: &str,
-        etag: Option<&str>,
-    ) -> Result<Option<Vec<u8>>, CommandError> {
-        let mut request = self.http.get(self.url(path)).bearer_auth(token);
-        if let Some(etag) = etag {
-            request = request.header(reqwest::header::IF_NONE_MATCH, etag);
-        }
-
-        let response = self.send(request, Some(Duration::from_secs(15))).await?;
         let status = response.status();
-
-        if status == reqwest::StatusCode::NOT_MODIFIED {
-            return Ok(None);
+        if !status.is_success() {
+            return Err(CommandError::new(
+                "download_failed",
+                format!("Could not download the update ({status})."),
+            ));
         }
 
-        if status.is_success() {
-            let bytes = response.bytes().await.map_err(CommandError::network)?;
-            return Ok(Some(bytes.to_vec()));
-        }
-
-        // A missing icon is not fatal: the tile falls back to its letter.
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-
-        Err(Self::failure(
-            status,
-            &response.text().await.unwrap_or_default(),
-        ))
+        Ok(response
+            .bytes()
+            .await
+            .map_err(CommandError::network)?
+            .to_vec())
     }
 }

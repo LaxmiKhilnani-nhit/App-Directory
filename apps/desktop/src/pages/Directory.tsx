@@ -1,33 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppTile } from "@app-directory/types";
 import { Button, EmptyState, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import { type CoreInfo, type Snapshot, openTile, toCommandError } from "../lib/api";
+import {
+  type CoreInfo,
+  type IdentityState,
+  type Snapshot,
+  type UpdateInfo,
+  applyUpdate,
+  checkUpdate,
+  openTile,
+  toCommandError,
+} from "../lib/api";
 import { relativeTime } from "../lib/time";
 
 export interface DirectoryProps {
   core: CoreInfo | null;
   snapshot: Snapshot;
+  identity: IdentityState | null;
   /** Browser preview: sample data, no core attached. */
   preview: boolean;
   refreshing: boolean;
   refreshError: string | null;
   onRefresh: () => void;
   onOpenError: (message: string) => void;
-  onSignOut: () => void;
 }
 
 export function Directory({
   core,
   snapshot,
+  identity,
   preview,
   refreshing,
   refreshError,
   onRefresh,
   onOpenError,
-  onSignOut,
 }: DirectoryProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const apps = useMemo(
@@ -67,7 +79,31 @@ export function Directory({
     [onOpenError],
   );
 
-  // Ctrl+F to search, Esc to clear, Enter to open the first match (PLAN.md §6.3).
+  const installUpdate = useCallback(async () => {
+    setUpdating(true);
+    setUpdateError(null);
+    try {
+      await applyUpdate();
+    } catch (failure) {
+      setUpdateError(toCommandError(failure).message);
+      setUpdating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (preview) return;
+    let active = true;
+    checkUpdate()
+      .then((info) => {
+        if (active) setUpdate(info.available ? info : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [preview, snapshot.revision]);
+
+  // Ctrl+F to search, Esc to clear, Enter to open the first match.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
@@ -135,14 +171,15 @@ export function Directory({
             {refreshing ? "Syncing…" : offline ? "Offline" : "Synced"}
           </span>
           <div className="desktop-user">
-            <span className="desktop-user__name">{snapshot.user.name}</span>
+            <span className="desktop-user__name">
+              {snapshot.user.name || identity?.shortName || "Windows account"}
+            </span>
             {snapshot.user.department ? (
               <span className="desktop-user__meta">{snapshot.user.department}</span>
+            ) : identity?.identity ? (
+              <span className="desktop-user__meta">{identity.identity}</span>
             ) : null}
           </div>
-          <Button variant="ghost" size="sm" onClick={onSignOut}>
-            Sign out
-          </Button>
         </div>
       </header>
 
@@ -150,6 +187,23 @@ export function Directory({
         {preview ? (
           <div className="desktop-banner desktop-banner--info">
             Browser preview — sample apps, no server connection.
+          </div>
+        ) : null}
+
+        {update ? (
+          <div className="desktop-banner desktop-banner--info desktop-update">
+            <span>
+              Version <strong>{update.version}</strong> is available.
+            </span>
+            <Button variant="primary" size="sm" onClick={() => void installUpdate()} disabled={updating}>
+              {updating ? "Updating…" : "Update now"}
+            </Button>
+          </div>
+        ) : null}
+
+        {updateError ? (
+          <div className="desktop-banner desktop-banner--error" role="alert">
+            {updateError}
           </div>
         ) : null}
 

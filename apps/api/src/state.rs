@@ -1,44 +1,31 @@
 use std::sync::Arc;
 
-use sqlx::PgPool;
-
 use crate::config::Config;
-use crate::rate_limit::RateLimiter;
+use crate::store::Store;
 
-/// Shared handler state. The pool is optional so the API can run without a database
-/// (health/static endpoints work, and local frontend development does not need Postgres).
+/// Shared handler state. There is no database pool: the CSV `Store` is the single source
+/// of truth and is shared behind an `Arc`.
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
-    pub pool: Option<PgPool>,
-    pub auth_limiter: Arc<RateLimiter>,
+    pub store: Arc<Store>,
 }
 
 impl AppState {
-    pub fn new(config: Config, pool: Option<PgPool>) -> Self {
+    pub fn new(config: Config, store: Arc<Store>) -> Self {
         Self {
             config: Arc::new(config),
-            pool,
-            auth_limiter: Arc::new(RateLimiter::new()),
+            store,
         }
     }
 
-    pub fn pool(&self) -> Result<&PgPool, AppStateError> {
-        self.pool.as_ref().ok_or(AppStateError::NoDatabase)
+    /// Mail domain used to turn a bare Windows username into an email address. The
+    /// `mail_domain` setting in settings.csv overrides the environment/config value.
+    pub fn mail_domain(&self) -> String {
+        let data = self.store.read();
+        data.setting("mail_domain")
+            .and_then(|value| value.as_str().map(str::to_string))
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| self.config.mail_domain.clone())
     }
 }
-
-#[derive(Debug)]
-pub enum AppStateError {
-    NoDatabase,
-}
-
-impl std::fmt::Display for AppStateError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppStateError::NoDatabase => write!(formatter, "database is not configured"),
-        }
-    }
-}
-
-impl std::error::Error for AppStateError {}

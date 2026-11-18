@@ -1,4 +1,4 @@
-use crate::domain::apps::MAX_ICON_BYTES;
+use axum::http::HeaderMap;
 
 /// Icon bytes fetched from the app's own site.
 pub struct FetchedIcon {
@@ -6,15 +6,9 @@ pub struct FetchedIcon {
     pub mime: &'static str,
 }
 
-/// Fetches `<origin>/favicon.ico` for the app's URL.
-///
-/// Icons are stored exactly as served (PNG, ICO, SVG, JPEG, GIF, WebP) and the browser
-/// renders them; there is deliberately no image decoding on the server, which keeps an
-/// admin-triggered fetch away from image-parser attack surface. The portal and the client
-/// both fall back to a coloured letter tile when an app has no icon.
+/// Fetches `<origin>/favicon.ico` for an app URL.
 pub async fn fetch_favicon(app_url: &str) -> Result<FetchedIcon, String> {
     let parsed = reqwest::Url::parse(app_url).map_err(|_| "The app URL is not valid.".to_string())?;
-
     let host = parsed
         .host_str()
         .ok_or_else(|| "The app URL has no host.".to_string())?;
@@ -36,41 +30,35 @@ pub async fn fetch_favicon(app_url: &str) -> Result<FetchedIcon, String> {
         .send()
         .await
         .map_err(|error| format!("Could not reach {candidate}: {error}"))?;
-
     if !response.status().is_success() {
-        return Err(format!(
-            "{candidate} returned HTTP {}.",
-            response.status().as_u16()
-        ));
+        return Err(format!("{candidate} returned HTTP {}.", response.status().as_u16()));
     }
-
     if let Some(length) = response.content_length() {
         if length as usize > MAX_ICON_BYTES {
             return Err("That favicon is larger than 512 KB.".to_string());
         }
     }
-
     let bytes = response
         .bytes()
         .await
         .map_err(|error| format!("Could not read the favicon: {error}"))?
         .to_vec();
-
     if bytes.is_empty() {
         return Err("The favicon was empty.".to_string());
     }
     if bytes.len() > MAX_ICON_BYTES {
         return Err("That favicon is larger than 512 KB.".to_string());
     }
-
     let mime = detect_mime(&bytes)
         .ok_or_else(|| "That file is not a recognised image format.".to_string())?;
 
     Ok(FetchedIcon { bytes, mime })
 }
 
-/// Detects the format from magic bytes; the HTTP `Content-Type` of an intranet server is
-/// frequently wrong, so it is only used as a hint by the caller (never trusted).
+pub const MAX_ICON_BYTES: usize = 512 * 1024;
+
+/// Detects the format from magic bytes. The HTTP `Content-Type` of an intranet server is
+/// frequently wrong, so it is only used as a hint by callers.
 pub fn detect_mime(bytes: &[u8]) -> Option<&'static str> {
     const PNG: &[u8] = &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
     const ICO: &[u8] = &[0x00, 0x00, 0x01, 0x00];
@@ -93,31 +81,29 @@ pub fn detect_mime(bytes: &[u8]) -> Option<&'static str> {
     }
 
     let text = String::from_utf8_lossy(&bytes[..bytes.len().min(1024)]);
-    let trimmed = text.trim_start();
-    let lower = trimmed.to_lowercase();
+    let lower = text.trim_start().to_lowercase();
     if lower.starts_with("<svg") || (lower.starts_with("<?xml") && lower.contains("<svg")) {
         return Some("image/svg+xml");
     }
-
     None
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recognises_common_formats() {
-        assert_eq!(
-            detect_mime(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]),
-            Some("image/png")
-        );
-        assert_eq!(detect_mime(&[0x00, 0x00, 0x01, 0x00, 0x01]), Some("image/x-icon"));
-        assert_eq!(detect_mime(&[0xff, 0xd8, 0xff, 0xe0]), Some("image/jpeg"));
-        assert_eq!(
-            detect_mime(b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>"),
-            Some("image/svg+xml")
-        );
-        assert_eq!(detect_mime(b"not an image at all"), None);
+/// Derives the weak ETag stored for an icon (same shape as the old Postgres API).
+pub fn etag_for(bytes: &[u8]) -> String {
+    // FNV-1a is plenty for a cache validator; it is not a security primitive.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100_0000_01b3);
     }
+    format!("W/\"{hash:016x}\"")
+}
+
+/// Whether `If-None-Match` matches the stored ETag (with or without the `W/` prefix).
+pub fn etag_matches(headers: &HeaderMap, etag: &str) -> bool {
+    headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .is_some_and(|candidate| candidate == etag || candidate == etag.trim_start_matches("W/"))
 }

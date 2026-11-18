@@ -43,14 +43,6 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, code, message)
     }
 
-    pub fn too_many_requests(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", message)
-    }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", message)
-    }
-
     pub fn status(&self) -> StatusCode {
         self.status
     }
@@ -59,6 +51,14 @@ impl ApiError {
         self.code
     }
 }
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
@@ -70,17 +70,23 @@ impl IntoResponse for ApiError {
     }
 }
 
-impl From<sqlx::Error> for ApiError {
-    fn from(error: sqlx::Error) -> Self {
-        tracing::error!(%error, "database error");
-        ApiError::internal("Something went wrong. Please try again.")
-    }
-}
-
 impl From<anyhow::Error> for ApiError {
     fn from(error: anyhow::Error) -> Self {
         tracing::error!(%error, "internal error");
         ApiError::internal("Something went wrong. Please try again.")
+    }
+}
+
+impl From<std::io::Error> for ApiError {
+    fn from(error: std::io::Error) -> Self {
+        tracing::error!(%error, "CSV storage error");
+        ApiError::internal("Could not read or write the CSV data store.")
+    }
+}
+
+impl ApiError {
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", message)
     }
 }
 

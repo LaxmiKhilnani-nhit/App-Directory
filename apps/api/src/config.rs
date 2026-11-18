@@ -1,17 +1,24 @@
 use std::path::PathBuf;
 
-/// Runtime configuration, all sourced from the environment so the same image works on
-/// the VM, a staging box, and a developer machine.
+/// Runtime configuration, all sourced from the environment so the same image works on the
+/// VM, a staging box, and a developer machine.
+///
+/// There is deliberately no database configuration: all state lives in CSV files under
+/// `data_dir`, and identity is trusted from a Windows username header.
 #[derive(Clone, Debug)]
 pub struct Config {
     pub bind_addr: String,
     pub port: u16,
     pub app_name: String,
     pub admin_dist: PathBuf,
-    pub database_url: Option<String>,
-    pub session_ttl_days: i64,
-    pub bootstrap_admin_email: Option<String>,
-    pub bootstrap_admin_password: Option<String>,
+    /// Directory holding users.csv, groups.csv, apps.csv, settings.csv, audit.csv,
+    /// revision.csv and the icons/ sub-directory.
+    pub data_dir: PathBuf,
+    /// Where the portable Windows client is mounted (see download.rs / CLIENT_EXE).
+    pub client_exe: Option<PathBuf>,
+    /// Domain appended to a bare Windows username to form an email address. The
+    /// `mail_domain` setting in settings.csv wins over this value at runtime.
+    pub mail_domain: String,
 }
 
 impl Default for Config {
@@ -21,10 +28,9 @@ impl Default for Config {
             port: 8090,
             app_name: "App Directory".to_string(),
             admin_dist: PathBuf::from("admin-dist"),
-            database_url: None,
-            session_ttl_days: 30,
-            bootstrap_admin_email: None,
-            bootstrap_admin_password: None,
+            data_dir: PathBuf::from("data"),
+            client_exe: None,
+            mail_domain: "nhit.co.in".to_string(),
         }
     }
 }
@@ -41,13 +47,14 @@ impl Config {
                 .unwrap_or(defaults.port),
             app_name: std::env::var("APP_NAME").unwrap_or(defaults.app_name),
             admin_dist: resolve_admin_dist(),
-            database_url: non_empty_var("DATABASE_URL"),
-            session_ttl_days: std::env::var("SESSION_TTL_DAYS")
+            data_dir: std::env::var("DATA_DIR")
+                .map(PathBuf::from)
+                .unwrap_or(defaults.data_dir),
+            client_exe: non_empty_var("CLIENT_EXE").map(PathBuf::from),
+            mail_domain: std::env::var("MAIL_DOMAIN")
                 .ok()
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(defaults.session_ttl_days),
-            bootstrap_admin_email: non_empty_var("BOOTSTRAP_ADMIN_EMAIL"),
-            bootstrap_admin_password: non_empty_var("BOOTSTRAP_ADMIN_PASSWORD"),
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(defaults.mail_domain),
         }
     }
 }

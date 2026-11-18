@@ -9,44 +9,13 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-use crate::domain::email::PASSWORD_MASK;
 use crate::domain::models::Setting;
-use crate::domain::{audit, email, revision, settings as settings_domain};
 use crate::error::{ApiError, ApiResult};
-use crate::http::admin::{pool_of, AdminUser, SuperAdmin};
-use crate::http::extract::ClientIp;
+use crate::http::identity::TrustedUser;
 use crate::http::json_body;
 use crate::state::AppState;
 
-/// The SMTP password is a secret: only ever hand the portal a mask, and treat a submitted
-/// mask as "unchanged" in `update` below.
-async fn masked(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Setting>> {
-    let mut settings = load(pool).await?;
-    for setting in &mut settings {
-        if setting.key == settings_domain::SMTP_PASSWORD
-            && !setting.value.as_str().unwrap_or("").is_empty()
-        {
-            setting.value = json!(PASSWORD_MASK);
-        }
-    }
-    Ok(settings)
-}
-
-pub async fn list(
-    State(state): State<AppState>,
-    AdminUser(_session): AdminUser,
-) -> ApiResult<Json<Vec<Setting>>> {
-    let pool = pool_of(&state)?;
-    Ok(Json(masked(pool).await?))
-}
-
-async fn load(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Setting>> {
-    sqlx::query_as::<_, Setting>(
-        "select key, value, updated_at, updated_by from settings order by key",
-    )
-    .fetch_all(pool)
-    .await
-}
+const PASSWORD_MASK: &str = "********";
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateRequest {
@@ -57,20 +26,32 @@ fn require_int(value: &Value, key: &str, min: i64, max: i64) -> Result<Value, Ap
     let number = value.as_i64().ok_or_else(|| {
         ApiError::bad_request("invalid_setting", format!("{key} must be a whole number."))
     })?;
-
-    if number < min || number > max {
+    if !(min..=max).contains(&number) {
         return Err(ApiError::bad_request(
             "invalid_setting",
             format!("{key} must be between {min} and {max}."),
         ));
     }
-
     Ok(json!(number))
+}
+
+fn require_flag(value: &Value, key: &str) -> Result<Value, ApiError> {
+    match value {
+        Value::Bool(flag) => Ok(json!(*flag)),
+        Value::Number(number) if number.as_i64() == Some(0) => Ok(json!(0)),
+        Value::Number(number) if number.as_i64() == Some(1) => Ok(json!(1)),
+        Value::String(text) if matches!(text.trim(), "0" | "1" | "true" | "false") => {
+            Ok(json!(matches!(text.trim(), "1" | "true")))
+        }
+        _ => Err(ApiError::bad_request(
+            "invalid_setting",
+            format!("{key} must be true or false."),
+        )),
+    }
 }
 
 fn require_string(value: &Value, key: &str, max: usize) -> Result<Value, ApiError> {
     let text = value.as_str().map(str::trim).unwrap_or("");
-
     if text.is_empty() {
         return Err(ApiError::bad_request(
             "invalid_setting",
@@ -83,25 +64,9 @@ fn require_string(value: &Value, key: &str, max: usize) -> Result<Value, ApiErro
             format!("{key} must be {max} characters or fewer."),
         ));
     }
-
     Ok(json!(text))
 }
 
-fn redact_password(values: &mut HashMap<String, Value>) {
-    if let Some(value) = values.get_mut(settings_domain::SMTP_PASSWORD) {
-        if !value.as_str().unwrap_or("").is_empty() {
-            *value = json!(PASSWORD_MASK);
-        }
-    }
-}
-
-fn require_bool(value: &Value, key: &str) -> Result<Value, ApiError> {
-    value.as_bool().map(|flag| json!(flag)).ok_or_else(|| {
-        ApiError::bad_request("invalid_setting", format!("{key} must be true or false."))
-    })
-}
-
-/// Like `require_string`, but empty values are allowed so an admin can clear a field.
 fn optional_string(value: &Value, key: &str, max: usize) -> Result<Value, ApiError> {
     let text = value
         .as_str()
@@ -119,7 +84,6 @@ fn validate_announcement(value: &Value) -> Result<Value, ApiError> {
     if value.is_null() {
         return Ok(Value::Null);
     }
-
     let object = value.as_object().ok_or_else(|| {
         ApiError::bad_request(
             "invalid_setting",
@@ -132,19 +96,16 @@ fn validate_announcement(value: &Value) -> Result<Value, ApiError> {
         .and_then(Value::as_str)
         .map(str::trim)
         .unwrap_or("");
-
     if text.is_empty() || text.chars().count() > 300 {
         return Err(ApiError::bad_request(
             "invalid_setting",
             "announcement.text must be between 1 and 300 characters.",
         ));
     }
-
     let level = object
         .get("level")
         .and_then(Value::as_str)
         .unwrap_or("info");
-
     if !matches!(level, "info" | "warning" | "critical") {
         return Err(ApiError::bad_request(
             "invalid_setting",
@@ -155,8 +116,7 @@ fn validate_announcement(value: &Value) -> Result<Value, ApiError> {
     let mut normalised = Map::new();
     normalised.insert("text".to_string(), json!(text));
     normalised.insert("level".to_string(), json!(level));
-
-    for (source, target) in [("activeFrom", "activeFrom"), ("activeTo", "activeTo")] {
+    for source in ["activeFrom", "activeTo"] {
         match object.get(source) {
             None | Some(Value::Null) => {}
             Some(raw) => {
@@ -172,30 +132,32 @@ fn validate_announcement(value: &Value) -> Result<Value, ApiError> {
                         format!("announcement.{source} must be an ISO-8601 timestamp."),
                     )
                 })?;
-                normalised.insert(target.to_string(), json!(parsed.with_timezone(&Utc)));
+                normalised.insert(source.to_string(), json!(parsed.with_timezone(&Utc)));
             }
         }
     }
-
     Ok(Value::Object(normalised))
 }
 
 fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
     match key {
-        settings_domain::APP_NAME => require_string(value, key, 80),
-        settings_domain::SYNC_INTERVAL_HOURS => require_int(value, key, 1, 168),
-        settings_domain::OFFLINE_GRACE_DAYS => require_int(value, key, 0, 90),
-        settings_domain::ANNOUNCEMENT => validate_announcement(value),
-        settings_domain::PASSWORD_MIN_LENGTH => require_int(value, key, 8, 200),
-        settings_domain::LOGIN_LOCKOUT_ATTEMPTS => require_int(value, key, 0, 100),
-        settings_domain::LOGIN_LOCKOUT_MINUTES => require_int(value, key, 1, 1440),
-        settings_domain::SMTP_ENABLED | settings_domain::SMTP_STARTTLS => require_bool(value, key),
-        settings_domain::SMTP_PORT => require_int(value, key, 1, 65535),
-        settings_domain::SMTP_HOST => optional_string(value, key, 253),
-        settings_domain::SMTP_USERNAME => optional_string(value, key, 320),
-        settings_domain::SMTP_PASSWORD => optional_string(value, key, 512),
-        settings_domain::SMTP_FROM_EMAIL => optional_string(value, key, 320),
-        settings_domain::SMTP_FROM_NAME => optional_string(value, key, 120),
+        "app_name" => require_string(value, key, 80),
+        "sync_interval_hours" => require_int(value, key, 1, 168),
+        "offline_grace_days" => require_int(value, key, 0, 90),
+        "announcement" => validate_announcement(value),
+        "mail_domain" => require_string(value, key, 253),
+        "default_identity" => optional_string(value, key, 253),
+        "update_enabled" => require_flag(value, key),
+        "update_version" => optional_string(value, key, 120),
+        "update_sha256" => optional_string(value, key, 128),
+        "update_url" => optional_string(value, key, 500),
+        "smtp_enabled" | "smtp_starttls" => require_flag(value, key),
+        "smtp_port" => require_int(value, key, 1, 65535),
+        "smtp_host" => optional_string(value, key, 253),
+        "smtp_username" => optional_string(value, key, 320),
+        "smtp_password" => optional_string(value, key, 512),
+        "smtp_from_email" => optional_string(value, key, 320),
+        "smtp_from_name" => optional_string(value, key, 120),
         other => Err(ApiError::bad_request(
             "unknown_setting",
             format!("{other} is not a setting this server knows."),
@@ -203,19 +165,38 @@ fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
     }
 }
 
+fn masked(data: &crate::store::Data) -> Vec<Setting> {
+    data.settings
+        .iter()
+        .map(|row| {
+            let mut setting = Setting::from(row);
+            if setting.key == "smtp_password" && !setting.value.as_str().unwrap_or("").is_empty() {
+                setting.value = json!(PASSWORD_MASK);
+            }
+            setting
+        })
+        .collect()
+}
+
+pub async fn list(
+    State(state): State<AppState>,
+    TrustedUser(_actor): TrustedUser,
+) -> ApiResult<Json<Vec<Setting>>> {
+    let data = state.store.read();
+    let mut settings = masked(&data);
+    settings.sort_by(|left, right| left.key.cmp(&right.key));
+    Ok(Json(settings))
+}
+
 pub async fn update(
     State(state): State<AppState>,
-    SuperAdmin(session): SuperAdmin,
-    ClientIp(ip): ClientIp,
+    TrustedUser(actor): TrustedUser,
     body: Result<Json<UpdateRequest>, JsonRejection>,
 ) -> ApiResult<Json<Vec<Setting>>> {
     let request = json_body(body)?;
-    let pool = pool_of(&state)?;
-
     let incoming = request.values.as_object().ok_or_else(|| {
         ApiError::bad_request("invalid_request", "values must be an object of settings.")
     })?;
-
     if incoming.is_empty() {
         return Err(ApiError::bad_request(
             "invalid_request",
@@ -223,69 +204,71 @@ pub async fn update(
         ));
     }
 
-    let before = load(pool).await?;
-    let mut before_map: HashMap<String, Value> = before
-        .into_iter()
-        .map(|setting| (setting.key, setting.value))
-        .collect();
-    redact_password(&mut before_map);
-
     let mut validated: Vec<(String, Value)> = Vec::with_capacity(incoming.len());
     for (key, value) in incoming {
-        if key == settings_domain::SMTP_PASSWORD && value.as_str() == Some(PASSWORD_MASK) {
-            // The portal sent back the mask: keep the stored password untouched.
+        if key == "smtp_password" && value.as_str() == Some(PASSWORD_MASK) {
             continue;
         }
         validated.push((key.clone(), validate(key, value)?));
     }
 
-    let mut transaction = pool.begin().await?;
+    let actor_id = actor.id;
+    let actor_email = actor.email.clone();
+    let before: HashMap<String, Value> = {
+        let data = state.store.read();
+        data.settings
+            .iter()
+            .map(|setting| (setting.key.clone(), setting.value.clone()))
+            .collect()
+    };
 
-    for (key, value) in &validated {
-        settings_domain::put_with(&mut *transaction, key, value, Some(session.user.id)).await?;
-    }
+    state.store.mutate(|data| {
+        let now = Utc::now();
+        let mut after = HashMap::new();
+        for (key, value) in &validated {
+            if let Some(setting) = data.settings.iter_mut().find(|setting| setting.key == *key) {
+                after.insert(setting.key.clone(), setting.value.clone());
+                setting.value = value.clone();
+                setting.updated_at = now;
+                setting.updated_by = Some(actor_id);
+            } else {
+                data.settings.push(crate::store::SettingRow {
+                    key: key.clone(),
+                    value: value.clone(),
+                    updated_at: now,
+                    updated_by: Some(actor_id),
+                });
+                after.insert(key.clone(), Value::Null);
+            }
+        }
 
-    let mut after: HashMap<String, Value> = validated.iter().cloned().collect();
-    redact_password(&mut after);
+        data.bump_revision();
+        data.audit(
+            Some(actor_id),
+            Some(actor_email.clone()),
+            "settings.update",
+            "settings",
+            None,
+            Some(serde_json::to_value(before).unwrap_or_default()),
+            Some(serde_json::to_value(after).unwrap_or_default()),
+        );
+        Ok(())
+    })?;
 
-    audit::record_tx(
-        &mut transaction,
-        Some(session.user.id),
-        "settings.update",
-        "settings",
-        None,
-        Some(json!(before_map)),
-        Some(json!(after)),
-        ip.map(|a| a.to_string()).as_deref(),
-    )
-    .await;
-
-    // An announcement change alters the client snapshot, and app_name is part of it too, so
-    // every settings write bumps the revision.
-    revision::bump(&mut transaction).await?;
-
-    transaction.commit().await?;
-
-    Ok(Json(masked(pool).await?))
+    list(State(state), TrustedUser(actor.clone())).await
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TestEmailRequest {
+    #[allow(dead_code)]
     pub email: String,
 }
 
-/// Lets a super admin verify the relay from the portal without creating a user.
+/// SMTP delivery is no longer part of this API. Keep the endpoint as a no-op so the
+/// settings screen's "send test email" button stays harmless.
 pub async fn test_email(
-    State(state): State<AppState>,
-    SuperAdmin(_session): SuperAdmin,
     body: Result<Json<TestEmailRequest>, JsonRejection>,
-) -> ApiResult<StatusCode> {
-    let request = json_body(body)?;
-    let pool = pool_of(&state)?;
-
-    email::test(pool, request.email.trim())
-        .await
-        .map_err(|error| ApiError::bad_request("email_failed", error))?;
-
-    Ok(StatusCode::NO_CONTENT)
+) -> StatusCode {
+    let _ = json_body(body);
+    StatusCode::NO_CONTENT
 }

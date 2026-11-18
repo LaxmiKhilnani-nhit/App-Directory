@@ -1,12 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Announcement, AppTile } from "@app-directory/types";
 
-/**
- * Typed wrappers around the Rust commands in `src-tauri/src/lib.rs`.
- *
- * Every command rejects with `{ code, message }` (see `CommandError` in `api.rs`), so the UI
- * only ever has to handle one error shape.
- */
+/** Typed wrappers around the Rust commands. There is no login or token in this client. */
 
 export interface CommandError {
   code: string;
@@ -18,17 +13,19 @@ export interface CoreInfo {
   version: string;
   apiBaseUrl: string;
   runningInTauri: boolean;
+  identity: string;
 }
 
-export interface SessionState {
-  signedIn: boolean;
+export interface IdentityState {
+  identity: string;
+  shortName: string;
   name: string | null;
   department: string | null;
-  mustChangePassword: boolean;
   cacheAvailable: boolean;
   cacheExpired: boolean;
   lastSyncedAt: string | null;
   serverReachable: boolean;
+  knownUser: boolean;
 }
 
 export interface SnapshotUser {
@@ -37,7 +34,6 @@ export interface SnapshotUser {
   mustChangePassword: boolean;
 }
 
-/** Mirrors `SnapshotView` in `src-tauri/src/sync.rs`. */
 export interface Snapshot {
   revision: number;
   serverTime: string;
@@ -52,17 +48,17 @@ export interface Snapshot {
   expired: boolean;
 }
 
-export interface SessionInfo {
-  name: string;
-  department: string | null;
-  mustChangePassword: boolean;
+export interface UpdateInfo {
+  available: boolean;
+  version: string;
+  sha256: string;
+  url: string;
 }
 
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-/** Normalises whatever `invoke` rejected with into the command error shape. */
 export function toCommandError(error: unknown): CommandError {
   if (typeof error === "object" && error !== null && "message" in error) {
     const candidate = error as Partial<CommandError>;
@@ -81,32 +77,8 @@ export async function coreInfo(): Promise<CoreInfo> {
   return invoke<CoreInfo>("core_info");
 }
 
-export async function sessionState(): Promise<SessionState> {
-  return invoke<SessionState>("session_state");
-}
-
-export async function login(email: string, password: string): Promise<SessionInfo> {
-  return invoke<SessionInfo>("login", { email, password });
-}
-
-export async function logout(): Promise<void> {
-  return invoke<void>("logout");
-}
-
-export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  return invoke<void>("change_password", { currentPassword, newPassword });
-}
-
-export async function requestPasswordReset(email: string): Promise<void> {
-  return invoke<void>("request_password_reset", { email });
-}
-
-export async function resetPassword(
-  email: string,
-  code: string,
-  newPassword: string,
-): Promise<void> {
-  return invoke<void>("reset_password", { email, code, newPassword });
+export async function identityState(): Promise<IdentityState> {
+  return invoke<IdentityState>("identity_state");
 }
 
 export async function syncSnapshot(manual: boolean): Promise<Snapshot> {
@@ -115,6 +87,14 @@ export async function syncSnapshot(manual: boolean): Promise<Snapshot> {
 
 export async function cachedSnapshot(): Promise<Snapshot | null> {
   return invoke<Snapshot | null>("cached_snapshot");
+}
+
+export async function checkUpdate(): Promise<UpdateInfo> {
+  return invoke<UpdateInfo>("check_update");
+}
+
+export async function applyUpdate(): Promise<void> {
+  return invoke<void>("apply_update");
 }
 
 export async function openApp(url: string): Promise<void> {
