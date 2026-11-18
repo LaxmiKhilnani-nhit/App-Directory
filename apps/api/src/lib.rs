@@ -1,17 +1,16 @@
 //! App Directory API library.
 //!
-//! Exposes the modules so integration tests can exercise the domain logic and the HTTP
-//! layer directly against a real database, while `main.rs` only wires configuration and
-//! the server.
+//! All state lives in CSV files under `data/`; there is no database, no password, no session
+//! and no onboarding code. Exposes the modules so integration tests can drive the real router
+//! against a temporary CSV directory, while `main.rs` only wires configuration and the server.
 
 pub mod config;
-pub mod db;
 pub mod domain;
 pub mod error;
 pub mod http;
-pub mod rate_limit;
 pub mod state;
 pub mod static_assets;
+pub mod store;
 
 use axum::Router;
 use tower_http::trace::TraceLayer;
@@ -23,7 +22,7 @@ pub fn build_router(state: AppState) -> Router {
     let admin = static_assets::router(&state.config);
 
     Router::new()
-        .merge(http::router())
+        .merge(http::router(state.clone()))
         .with_state(state)
         .merge(admin)
         .layer(TraceLayer::new_for_http())

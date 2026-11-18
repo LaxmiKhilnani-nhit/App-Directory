@@ -1,163 +1,75 @@
 pub mod apps;
-pub mod audit_log;
+pub mod audit;
+pub mod departments;
 pub mod groups;
-pub mod reset;
 pub mod settings;
 pub mod stats;
 pub mod users;
 
 use axum::{
-    extract::FromRequestParts,
-    http::request::Parts,
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
-use serde::Serialize;
+use serde_json::json;
 
-use crate::domain::apps::AdminApp;
-use crate::domain::auth::{AuthSession, SessionUser};
-use crate::error::ApiError;
-use crate::http::extract::AuthUser;
+use crate::domain::models::AdminMe;
+use crate::http::identity::{self, TrustedUser};
 use crate::state::AppState;
 
-/// Every admin endpoint sits behind this. It is the normal bearer-token check plus two
-/// policy gates: the account must have finished its first-login password change, and it
-/// must hold an admin role.
-pub struct AdminUser(pub AuthSession);
+/// The admin portal is for administrators only. A plain `user` account may sign in to the
+/// desktop client but gets a 403 from every /admin endpoint.
+async fn require_admin(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    let (parts, body) = request.into_parts();
+    let query_identity = identity::query_value(&parts, "identity");
+    let allowed = identity::resolve(&parts, query_identity.as_deref(), &state)
+        .as_deref()
+        .and_then(|raw| identity::find_user(&state, raw))
+        .map(|user| matches!(user.role.as_str(), "super_admin" | "app_admin"))
+        .unwrap_or(false);
 
-impl FromRequestParts<AppState> for AdminUser {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
-        let AuthUser(session) = AuthUser::from_request_parts(parts, state).await?;
-
-        if session.user.must_change_password {
-            return Err(ApiError::forbidden(
-                "password_change_required",
-                "Set a new password before using the admin portal.",
-            ));
-        }
-
-        if !matches!(session.user.role.as_str(), "app_admin" | "super_admin") {
-            return Err(ApiError::forbidden(
-                "forbidden",
-                "Administrator access is required.",
-            ));
-        }
-
-        Ok(AdminUser(session))
+    if !allowed {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": { "code": "admin_only", "message": "Administrator access is required." }
+            })),
+        )
+            .into_response();
     }
+
+    next.run(Request::from_parts(parts, body)).await
 }
 
-/// Stricter gate for account, group, settings and reset-queue management. An `app_admin`
-/// may manage apps and grants in their scope, but not people or global configuration.
-pub struct SuperAdmin(pub AuthSession);
-
-impl FromRequestParts<AppState> for SuperAdmin {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
-        let AdminUser(session) = AdminUser::from_request_parts(parts, state).await?;
-
-        if session.user.role != "super_admin" {
-            return Err(ApiError::forbidden(
-                "forbidden",
-                "Only a super admin can do that.",
-            ));
-        }
-
-        Ok(SuperAdmin(session))
-    }
-}
-
-/// Category scope for an `app_admin`. `admin_scope` is `{ "categories": [...] }`; a
-/// super admin ignores it.
-pub struct Scope<'a> {
-    user: &'a SessionUser,
-}
-
-impl<'a> Scope<'a> {
-    pub fn new(user: &'a SessionUser) -> Self {
-        Self { user }
-    }
-
-    pub fn is_super(&self) -> bool {
-        self.user.role == "super_admin"
-    }
-
-    fn categories(&self) -> Vec<String> {
-        self.user
-            .admin_scope
-            .as_ref()
-            .and_then(|scope| scope.get("categories"))
-            .and_then(|categories| categories.as_array())
-            .map(|categories| {
-                categories
-                    .iter()
-                    .filter_map(|category| category.as_str())
-                    .map(|category| category.trim().to_lowercase())
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    pub fn allows_category(&self, category: Option<&str>) -> bool {
-        if self.is_super() {
-            return true;
-        }
-
-        match category {
-            Some(category) => self
-                .categories()
-                .iter()
-                .any(|allowed| allowed == &category.trim().to_lowercase()),
-            None => false,
-        }
-    }
-
-    pub fn require_category(&self, category: Option<&str>) -> Result<(), ApiError> {
-        if self.allows_category(category) {
-            Ok(())
-        } else {
-            Err(ApiError::forbidden(
-                "out_of_scope",
-                "That app is outside your assigned categories.",
-            ))
-        }
-    }
-
-    pub fn require_app(&self, app: &AdminApp) -> Result<(), ApiError> {
-        self.require_category(app.category.as_deref())
-    }
-
-    pub fn filter(&self, apps: Vec<AdminApp>) -> Vec<AdminApp> {
-        if self.is_super() {
-            return apps;
-        }
-
-        apps.into_iter()
-            .filter(|app| self.allows_category(app.category.as_deref()))
-            .collect()
-    }
-}
-
-pub fn router() -> Router<AppState> {
+/// All admin endpoints are behind the trusted-identity gate. There are no roles to enforce
+/// any more: `/admin/me` always reports a super admin so the SPA's route guards pass.
+pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/me", get(me))
         .route("/api/v1/admin/stats", get(stats::get))
         .route(
-            "/api/v1/admin/apps",
-            get(apps::list).post(apps::create),
+            "/api/v1/admin/departments",
+            get(departments::list).post(departments::create),
         )
+        .route(
+            "/api/v1/admin/departments/{id}",
+            axum::routing::patch(departments::update).delete(departments::delete),
+        )
+        .route(
+            "/api/v1/admin/departments/{id}/apps",
+            get(departments::get_apps).put(departments::set_apps),
+        )
+        .route("/api/v1/admin/apps", get(apps::list).post(apps::create))
         .route(
             "/api/v1/admin/apps/{id}",
             get(apps::get).patch(apps::update).delete(apps::delete),
+        )
+        .route(
+            "/api/v1/admin/apps/{id}/departments",
+            put(apps::set_departments),
         )
         .route("/api/v1/admin/apps/{id}/icon", post(apps::upload_icon))
         .route(
@@ -180,10 +92,7 @@ pub fn router() -> Router<AppState> {
             "/api/v1/admin/groups/{id}/members",
             put(groups::set_members),
         )
-        .route(
-            "/api/v1/admin/users",
-            get(users::list).post(users::create),
-        )
+        .route("/api/v1/admin/users", get(users::list).post(users::create))
         .route("/api/v1/admin/users/import", post(users::import))
         .route(
             "/api/v1/admin/users/{id}",
@@ -191,47 +100,16 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/v1/admin/users/{id}/apps", put(users::set_apps))
         .route(
-            "/api/v1/admin/users/{id}/reset-code",
-            post(users::reset_code),
-        )
-        .route("/api/v1/admin/reset-requests", get(reset::list))
-        .route(
-            "/api/v1/admin/reset-requests/{id}/issue",
-            post(reset::issue),
-        )
-        .route(
-            "/api/v1/admin/reset-requests/{id}/dismiss",
-            post(reset::dismiss),
-        )
-        .route(
             "/api/v1/admin/settings",
             get(settings::list).put(settings::update),
         )
-        .route(
-            "/api/v1/admin/settings/test-email",
-            post(settings::test_email),
-        )
-        .route("/api/v1/admin/audit", get(audit_log::list))
+        .route("/api/v1/admin/audit", get(audit::list))
+        .layer(axum::middleware::from_fn_with_state(state, require_admin))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Me {
-    user: SessionUser,
-    is_super_admin: bool,
-}
-
-async fn me(AdminUser(session): AdminUser) -> Json<Me> {
-    Json(Me {
-        is_super_admin: session.user.role == "super_admin",
-        user: session.user,
+async fn me(TrustedUser(user): TrustedUser) -> Json<AdminMe> {
+    Json(AdminMe {
+        is_super_admin: true,
+        user,
     })
-}
-
-/// Shared "no database configured" mapping for the handlers below.
-pub(crate) fn pool_of(state: &AppState) -> Result<&sqlx::PgPool, ApiError> {
-    state
-        .pool
-        .as_ref()
-        .ok_or_else(|| ApiError::internal("Database is not configured."))
 }

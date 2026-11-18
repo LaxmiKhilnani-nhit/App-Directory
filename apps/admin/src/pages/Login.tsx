@@ -120,10 +120,6 @@ export function Login() {
         ) : null}
 
         {message ? <div className="admin-notice admin-notice--danger">{message}</div> : null}
-
-        <p className="admin-muted" style={{ fontSize: 12.5 }}>
-          Forgotten your password? Ask IT for a reset code.
-        </p>
       </form>
     </div>
   );

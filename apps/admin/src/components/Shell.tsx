@@ -11,10 +11,10 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/apps", label: "Apps" },
+  { to: "/departments", label: "Departments", superOnly: true },
   { to: "/groups", label: "Groups", superOnly: true },
   { to: "/users", label: "Users", superOnly: true },
   { to: "/import", label: "CSV import", superOnly: true },
-  { to: "/reset-requests", label: "Reset queue", superOnly: true },
   { to: "/settings", label: "Settings", superOnly: true },
   { to: "/audit", label: "Audit log", superOnly: true },
 ];
@@ -64,6 +64,9 @@ export function Shell() {
               {item.label}
             </NavLink>
           ))}
+          <a href="/download/app-directory.exe" className="admin-nav__download">
+            Download client
+          </a>
         </nav>
       </aside>
       <div className="admin-main">

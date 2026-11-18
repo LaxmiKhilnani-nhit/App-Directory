@@ -4,14 +4,12 @@ import type {
   AdminApp,
   AdminGroup,
   AdminUser,
-  IssuedCode,
   Role,
   UserDetail,
 } from "@app-directory/types";
 import { adminApi, type UserInput, type UserPatch } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../auth";
-import { CodeCallout } from "./CodeCallout";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer } from "./Drawer";
 import { CheckboxField, SelectField, TextField } from "./Form";
@@ -57,6 +55,7 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
 
   const apps = useAsync(() => adminApi.apps(), []);
   const groups = useAsync(() => adminApi.groups(), []);
+  const departments = useAsync(() => adminApi.departments(), []);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -72,8 +71,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [code, setCode] = useState<IssuedCode | null>(null);
-  const [codePurpose, setCodePurpose] = useState<"onboard" | "reset">("onboard");
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
 
   useEffect(() => {
@@ -112,7 +109,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    setCode(null);
 
     const scope = role === "app_admin" ? { categories: parseCategories(scopeText) } : null;
 
@@ -128,20 +124,7 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
         const created = await adminApi.createUser(input);
         onChanged(created);
         setCreatedId(created.id);
-
-        try {
-          const issued = await adminApi.issueResetCode(created.id, "onboard");
-          setCodePurpose("onboard");
-          setCode(issued);
-          setNotice(
-            issued.emailed
-              ? "Account created. The onboarding code was emailed to the user."
-              : "Account created. Share the onboarding code below.",
-          );
-        } catch (cause) {
-          setNotice("Account created, but the onboarding code could not be issued.");
-          setError(errorMessage(cause));
-        }
+        setNotice("Account created.");
       } else {
         const patch: UserPatch = {
           name: name.trim(),
@@ -174,22 +157,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
       setSelectedApps(new Set(updated.appIds));
       setNotice("Direct app grants saved.");
       detail.reload();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function issueCode() {
-    if (!effectiveId) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const issued = await adminApi.issueResetCode(effectiveId, "reset");
-      setCodePurpose("reset");
-      setCode(issued);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -275,15 +242,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
         {error ? <Notice tone="danger">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        {code ? (
-          <CodeCallout
-            code={code.code}
-            expiresAt={code.expiresAt}
-            email={detail.data?.email ?? email}
-            purpose={codePurpose}
-          />
-        ) : null}
-
         {!creating && detail.data ? (
           <div className="admin-chiprow">
             <Badge tone={detail.data.isActive ? "success" : "danger"}>
@@ -346,14 +304,17 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
             </div>
 
             <div className="admin-form-grid">
-              <TextField
+              <SelectField
                 label="Department"
                 value={department}
                 onChange={(event) => setDepartment(event.target.value)}
-                maxLength={120}
-                placeholder="Finance"
-                hint="Automatic groups match on this value."
-              />
+                hint="Apps granted to this department appear for the user automatically."
+              >
+                <option value="">No department</option>
+                {(departments.data ?? []).map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </SelectField>
 
               <SelectField
                 label="Role"
@@ -392,25 +353,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
                 disabled={self}
                 onChange={setIsActive}
               />
-            ) : null}
-
-            {!creating ? (
-              <>
-                <hr className="admin-divider" />
-                <div className="admin-stack-sm">
-                  <h3 className="admin-section-title">Password</h3>
-                  <p className="admin-inline-hint">
-                    {detail.data?.hasPassword
-                      ? "Issue a one-time code if this person forgot their password."
-                      : "This account has no password yet. Issue an onboarding code to let them set one."}
-                  </p>
-                  <div className="admin-actions">
-                    <Button size="sm" onClick={issueCode} disabled={busy}>
-                      {detail.data?.hasPassword ? "Issue reset code" : "Issue onboarding code"}
-                    </Button>
-                  </div>
-                </div>
-              </>
             ) : null}
 
             {!creating ? (

@@ -306,6 +306,11 @@
   color: var(--color-danger);
 }
 
+.desktop-update {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .desktop-announcement--warning {
   background: var(--color-warning-soft);
   border-color: #f0dcb0;

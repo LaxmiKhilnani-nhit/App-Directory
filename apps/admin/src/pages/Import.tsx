@@ -128,26 +128,13 @@ function rowErrors(row: ParsedRow, seen: Set<string>, knownGroups: Set<string> |
   return problems;
 }
 
-function downloadCodes(report: ImportReport) {
-  const lines = [
-    "email,code,expires_at",
-    ...report.onboarding.map((entry) => `"${entry.email}","${entry.code}","${entry.expiresAt}"`),
-  ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "app-directory-onboarding-codes.csv";
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 export function Import() {
   const [csv, setCsv] = useState("");
   const [report, setReport] = useState<ImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  
 
   const groups = useAsync(() => adminApi.groups(), []);
 
@@ -198,18 +185,6 @@ export function Import() {
     }
   }
 
-  async function copyCodes() {
-    if (!report) return;
-    try {
-      await navigator.clipboard.writeText(
-        report.onboarding.map((entry) => `${entry.email}\t${entry.code}`).join("\n"),
-      );
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   const canCommit = Boolean(csv.trim()) && !parsed.error && parsed.rows.length > 0 && !busy;
 
@@ -352,7 +327,7 @@ export function Import() {
 
               <p className="admin-inline-hint">
                 The server validates again on commit. New accounts must set a password through the
-                onboarding code; existing accounts keep their roles and passwords.
+                existing accounts keep their roles and are updated from the CSV.
               </p>
 
               <div className="admin-actions">
@@ -420,56 +395,6 @@ export function Import() {
             </div>
           ) : null}
 
-          {report.onboarding.length > 0 ? (
-            <div className="admin-stack-sm" style={{ marginTop: "var(--space-4)" }}>
-              <div className="admin-pagehead">
-                <h3 className="admin-section-title">Onboarding codes</h3>
-                <div className="admin-actions">
-                  <Button size="sm" onClick={copyCodes}>
-                    {copied ? "Copied" : "Copy all"}
-                  </Button>
-                  <Button size="sm" onClick={() => downloadCodes(report)}>
-                    Download CSV
-                  </Button>
-                </div>
-              </div>
-              <p className="admin-inline-hint">
-                Each code is single use and expires in 72 hours. Codes marked “Emailed” were
-                delivered to the user; the rest must be shared manually.
-              </p>
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Email</th>
-                      <th>Code</th>
-                      <th>Delivery</th>
-                      <th>Expires</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.onboarding.map((entry) => (
-                      <tr key={entry.email}>
-                        <td className="admin-mono">{entry.email}</td>
-                        <td className="admin-mono">{entry.code}</td>
-                        <td>
-                          <Badge tone={entry.emailed ? "success" : "neutral"}>
-                            {entry.emailed ? "Emailed" : "Show the user"}
-                          </Badge>
-                        </td>
-                        <td className="admin-muted-cell">
-                          {new Date(entry.expiresAt).toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
         </section>
       ) : null}
     </>

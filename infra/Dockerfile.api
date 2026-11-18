@@ -18,10 +18,9 @@ WORKDIR /app
 # Cache dependency compilation across source-only changes.
 COPY apps/api/Cargo.toml apps/api/Cargo.lock ./
 RUN mkdir -p src \
- && printf 'fn main() {}\n' > src/main.rs \
- && cargo build --release \
- && rm -rf src
-COPY apps/api/migrations ./migrations
+  && printf 'fn main() {}\n' > src/main.rs \
+  && cargo build --release \
+  && rm -rf src
 COPY apps/api/src ./src
 RUN touch src/main.rs && cargo build --release
 
@@ -29,15 +28,20 @@ RUN touch src/main.rs && cargo build --release
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --create-home appdir
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --system --uid 10001 --create-home appdir
 
 WORKDIR /app
 COPY --from=api-build /app/target/release/app-directory-api /usr/local/bin/app-directory-api
 COPY --from=admin-build /repo/apps/admin/dist /app/admin-dist
 
+# The CSV store is mounted here at runtime (see docker-compose.yml). Create it in the image
+# too so a bare `docker run` still works.
+RUN mkdir -p /app/data /app/client && chown -R appdir:appdir /app/data
+
 ENV ADMIN_DIST=/app/admin-dist \
+    DATA_DIR=/app/data \
     PORT=8090 \
     BIND_ADDR=0.0.0.0 \
     RUST_LOG=info

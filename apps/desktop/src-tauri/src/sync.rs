@@ -100,7 +100,6 @@ fn previous_etags() -> HashMap<String, String> {
 
 async fn refresh_icons(
     api: &ApiClient,
-    token: &str,
     apps: &[SyncApp],
     prior: &HashMap<String, String>,
 ) {
@@ -116,7 +115,7 @@ async fn refresh_icons(
         }
 
         match api
-            .icon(token, path, prior.get(&app.id).map(String::as_str))
+            .icon(path, prior.get(&app.id).map(String::as_str))
             .await
         {
             Ok(Some(bytes)) => {
@@ -139,11 +138,11 @@ async fn refresh_icons(
 }
 
 /// Hits `/client/sync`, refreshes icons, then writes the encrypted cache.
-pub async fn fetch(api: &ApiClient, token: &str) -> Result<cache::StoredSnapshot, CommandError> {
-    let payload: SyncPayload = api.sync(token).await?;
+pub async fn fetch(api: &ApiClient) -> Result<cache::StoredSnapshot, CommandError> {
+    let payload: SyncPayload = api.sync().await?;
     let prior = previous_etags();
 
-    refresh_icons(api, token, &payload.apps, &prior).await;
+    refresh_icons(api, &payload.apps, &prior).await;
 
     let stored = cache::StoredSnapshot {
         schema_version: config::SCHEMA_VERSION,

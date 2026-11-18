@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import type { AdminApp, AdminGroup, AdminUser, AppTile } from "@app-directory/types";
+import type { AdminApp, AdminGroup, AdminUser, AppTile, Department } from "@app-directory/types";
 import { adminApi, type AppInput } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../auth";
@@ -36,6 +36,9 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
   const [isEnabled, setIsEnabled] = useState(app?.isEnabled ?? true);
   const [offlineVisible, setOfflineVisible] = useState(app?.offlineVisible ?? true);
 
+  const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(
+    () => new Set(app?.departmentIds ?? []),
+  );
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(
     () => new Set(app?.groupIds ?? []),
   );
@@ -50,6 +53,7 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const departments = useAsync(() => adminApi.departments(), []);
   const users = useAsync(
     () => (isSuper ? adminApi.users({ limit: 500 }) : Promise.resolve(null)),
     [isSuper],
@@ -62,6 +66,7 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
 
   function resetAccessState(updated: AdminApp) {
     setCurrent(updated);
+    setSelectedDepartments(new Set(updated.departmentIds));
     setSelectedGroups(new Set(updated.groupIds));
     setSelectedUsers(new Set(updated.userIds));
     onChanged(updated);
@@ -391,10 +396,54 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
         {tab === "access" && current ? (
           <div className="admin-form-stack">
             <div className="admin-stack-sm">
+              <h3 className="admin-section-title">Departments with access</h3>
+              <p className="admin-inline-hint">
+                Everyone assigned to a selected department sees this tile. Changes apply on the
+                next client sync.
+              </p>
+              <div className="admin-checklist">
+                {!departments.data || departments.data.length === 0 ? (
+                  <div className="admin-empty-inline">
+                    No departments yet — add them on the Departments screen.
+                  </div>
+                ) : (
+                  departments.data.map((department: Department) => (
+                    <CheckboxField
+                      key={department.id}
+                      label={department.name}
+                      hint={`${department.userCount} people · ${department.appCount} apps`}
+                      checked={selectedDepartments.has(department.id)}
+                      onChange={(checked) => {
+                        const next = new Set(selectedDepartments);
+                        if (checked) next.add(department.id);
+                        else next.delete(department.id);
+                        setSelectedDepartments(next);
+                        if (!current) return;
+                        setBusy(true);
+                        adminApi
+                          .setAppDepartments(current.id, [...next])
+                          .then((updated) => {
+                            setCurrent(updated);
+                            setNotice("Department access saved.");
+                            onChanged(updated);
+                          })
+                          .catch((cause) => setError(errorMessage(cause)))
+                          .finally(() => setBusy(false));
+                      }}
+                    />
+                  ))
+                )}
+              </div>
+              <p className="admin-inline-hint">Changes save automatically.</p>
+            </div>
+
+            <hr className="admin-divider" />
+
+            <div className="admin-stack-sm">
               <h3 className="admin-section-title">Groups with access</h3>
               <p className="admin-inline-hint">
-                Everyone in a selected group sees this tile: explicit members, matching departments,
-                and the built-in All Users group.
+                Everyone in a selected group sees this tile: explicit members and the built-in All
+                Users group.
               </p>
               <div className="admin-checklist">
                 {groups.length === 0 ? (

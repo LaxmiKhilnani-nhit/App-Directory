@@ -4,10 +4,9 @@ import type {
   AdminMe,
   AdminUser,
   AuditPage,
+  Department,
   GroupDetail,
   ImportReport,
-  IssuedCode,
-  ResetRequest,
   Setting,
   Stats,
   UserDetail,
@@ -97,6 +96,11 @@ export const adminApi = {
       body: JSON.stringify(patch),
     }),
   deleteApp: (id: string) => request<void>(`/api/v1/admin/apps/${id}`, { method: "DELETE" }),
+  setAppDepartments: (id: string, departmentIds: string[]) =>
+    request<AdminApp>(`/api/v1/admin/apps/${id}/departments`, {
+      method: "PUT",
+      body: JSON.stringify({ departmentIds }),
+    }),
   setAppGroups: (id: string, groupIds: string[]) =>
     request<AdminApp>(`/api/v1/admin/apps/${id}/groups`, {
       method: "PUT",
@@ -115,6 +119,26 @@ export const adminApi = {
       file,
       file.type || "application/octet-stream",
     ),
+
+  departments: () => request<Department[]>("/api/v1/admin/departments"),
+  createDepartment: (name: string) =>
+    request<Department>("/api/v1/admin/departments", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  departmentApps: (id: string) => request<string[]>(`/api/v1/admin/departments/${id}/apps`),
+  setDepartmentApps: (id: string, appIds: string[]) =>
+    request<Department>(`/api/v1/admin/departments/${id}/apps`, {
+      method: "PUT",
+      body: JSON.stringify({ appIds }),
+    }),
+  updateDepartment: (id: string, name: string) =>
+    request<Department>(`/api/v1/admin/departments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  deleteDepartment: (id: string) =>
+    request<void>(`/api/v1/admin/departments/${id}`, { method: "DELETE" }),
 
   groups: () => request<AdminGroup[]>("/api/v1/admin/groups"),
   group: (id: string) => request<GroupDetail>(`/api/v1/admin/groups/${id}`),
@@ -154,30 +178,13 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ appIds }),
     }),
-  issueResetCode: (id: string, purpose: "onboard" | "reset") =>
-    request<IssuedCode>(`/api/v1/admin/users/${id}/reset-code`, {
-      method: "POST",
-      body: JSON.stringify({ purpose }),
-    }),
   importUsers: (csv: string) =>
     request<ImportReport>("/api/v1/admin/users/import", {
       method: "POST",
       body: JSON.stringify({ csv }),
     }),
 
-  resetRequests: (status: string | null = "open") =>
-    request<ResetRequest[]>(`/api/v1/admin/reset-requests${queryString({ status })}`),
-  issueResetRequest: (id: string) =>
-    request<IssuedCode>(`/api/v1/admin/reset-requests/${id}/issue`, { method: "POST" }),
-  dismissResetRequest: (id: string) =>
-    request<void>(`/api/v1/admin/reset-requests/${id}/dismiss`, { method: "POST" }),
-
   settings: () => request<Setting[]>("/api/v1/admin/settings"),
-  testEmail: (email: string) =>
-    request<void>("/api/v1/admin/settings/test-email", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
   updateSettings: (values: Record<string, unknown>) =>
     request<Setting[]>("/api/v1/admin/settings", {
       method: "PUT",

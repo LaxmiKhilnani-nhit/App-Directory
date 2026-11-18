@@ -1,75 +1,95 @@
-use sqlx::PgPool;
+use std::collections::HashSet;
+
 use uuid::Uuid;
 
-use crate::domain::models::AppSummary;
+use crate::store::Data;
 
-/// The single definition of "what may this user see".
+/// What a user may see, defined in one place.
 ///
-/// Effective access = direct grants ∪ grants through any group the user belongs to, where
-/// membership is either explicit (`group_members`), derived from `users.department`, or
-/// implicit through the built-in All Users group. Disabled users and disabled/deleted apps
-/// never match.
-const ENTITLED_APPS_SQL: &str = r#"
-select a.id,
-       a.name,
-       a.url,
-       a.description,
-       a.category,
-       a.color,
-       a.sort_order,
-       a.offline_visible,
-       a.icon_source,
-       a.icon_etag,
-       a.updated_at
-  from apps a
- where a.deleted_at is null
-   and a.is_enabled
-   and exists (
-        select 1 from users u
-         where u.id = $1
-           and u.is_active
-   )
-   and (
-        exists (
-            select 1 from user_apps ua
-             where ua.app_id = a.id
-               and ua.user_id = $1
-        )
-        or exists (
-            select 1
-              from app_groups ag
-              join groups g on g.id = ag.group_id
-              left join users u on u.id = $1
-             where ag.app_id = a.id
-               and (
-                   g.is_all_users
-                   or (g.auto_department is not null and g.auto_department = u.department)
-                   or exists (
-                       select 1 from group_members gm
-                        where gm.group_id = g.id
-                          and gm.user_id = $1
-                   )
-               )
-        )
-   )
- order by a.sort_order, a.name
-"#;
+/// Effective access = direct person grants ∪ department grants ∪ explicit group grants.
+/// There is no built-in All Users group: a user only sees what their own department, their
+/// groups or a direct grant gives them. Inactive users and disabled/deleted apps never match.
+pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
+    let Some(user) = data.user_by_id(user_id) else {
+        return Vec::new();
+    };
+    if !user.is_active {
+        return Vec::new();
+    }
 
-/// Apps the user is entitled to, in display order.
-pub async fn apps_for_user(pool: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<AppSummary>> {
-    sqlx::query_as::<_, AppSummary>(ENTITLED_APPS_SQL)
-        .bind(user_id)
-        .fetch_all(pool)
-        .await
+    let mut entitled_groups: HashSet<Uuid> = HashSet::new();
+
+    for group in &data.groups {
+        if group.is_all_users {
+            // Retired: granting to everyone would break per-department isolation.
+            continue;
+        }
+        if let Some(department) = group.auto_department.as_deref() {
+            if user.department.as_deref() == Some(department) {
+                entitled_groups.insert(group.id);
+            }
+            continue;
+        }
+        if data
+            .group_members
+            .iter()
+            .any(|member| member.group_id == group.id && member.user_id == user_id)
+        {
+            entitled_groups.insert(group.id);
+        }
+    }
+
+    // A person belongs to one department by name; granting an app to the department grants it
+    // to everybody in it. Department names are managed centrally in departments.csv.
+    let granted_departments: HashSet<Uuid> = user
+        .department
+        .as_deref()
+        .map(|name| {
+            data.departments
+                .iter()
+                .filter(|department| department.name.eq_ignore_ascii_case(name.trim()))
+                .map(|department| department.id)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut apps: Vec<crate::store::AppRow> = data
+        .apps
+        .iter()
+        .filter(|app| {
+            if app.deleted_at.is_some() || !app.is_enabled {
+                return false;
+            }
+            if data
+                .user_apps
+                .iter()
+                .any(|grant| grant.app_id == app.id && grant.user_id == user_id)
+            {
+                return true;
+            }
+            if data.app_departments.iter().any(|grant| {
+                grant.app_id == app.id && granted_departments.contains(&grant.department_id)
+            }) {
+                return true;
+            }
+            data.app_groups
+                .iter()
+                .any(|grant| grant.app_id == app.id && entitled_groups.contains(&grant.group_id))
+        })
+        .cloned()
+        .collect();
+
+    apps.sort_by(|left, right| {
+        left.sort_order
+            .cmp(&right.sort_order)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    apps
 }
 
-/// Whether the user may see one specific app. Used by the icon route and future SSO hand-off.
-pub async fn is_entitled(pool: &PgPool, user_id: Uuid, app_id: Uuid) -> sqlx::Result<bool> {
-    let sql = format!("select exists (select 1 from ({ENTITLED_APPS_SQL}) entitled where id = $2)");
-
-    sqlx::query_scalar::<_, bool>(&sql)
-        .bind(user_id)
-        .bind(app_id)
-        .fetch_one(pool)
-        .await
+/// Whether the user may see one specific app. Used by the icon route.
+pub fn is_entitled(data: &Data, user_id: Uuid, app_id: Uuid) -> bool {
+    apps_for_user(data, user_id)
+        .iter()
+        .any(|app| app.id == app_id)
 }

@@ -1,16 +1,12 @@
-use axum::{
-    extract::{Query, State},
-    Json,
-};
+use axum::{extract::Query, Json};
 use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::domain::entitlements;
-use crate::domain::{revision, settings};
+use crate::domain::models::{SyncApp, SyncPayload, SyncUser};
 use crate::error::ApiResult;
-use crate::http::admin::pool_of;
-use crate::http::extract::AuthUser;
+use crate::http::identity::KnownUser;
 use crate::state::AppState;
 
 #[derive(Debug, Default, Deserialize)]
@@ -18,74 +14,36 @@ pub struct SyncQuery {
     /// Accepted for forward compatibility; the payload is always a full snapshot.
     #[allow(dead_code)]
     pub cursor: Option<i64>,
+    /// Windows identity, e.g. `ad\laxmikhilnani`. Also accepted as a header.
+    pub identity: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncUser {
-    pub name: String,
-    pub department: Option<String>,
-    pub must_change_password: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncApp {
-    pub id: uuid::Uuid,
-    pub name: String,
-    pub url: String,
-    pub description: Option<String>,
-    pub category: Option<String>,
-    pub color: Option<String>,
-    pub sort_order: i32,
-    pub offline_visible: bool,
-    pub icon_url: Option<String>,
-    pub icon_etag: Option<String>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncPayload {
-    pub revision: i64,
-    pub server_time: DateTime<Utc>,
-    pub offline_valid_until: DateTime<Utc>,
-    pub snapshot_days: i64,
-    /// How often the client should refresh in the background.
-    pub sync_interval_hours: i64,
-    pub announcement: Option<Value>,
-    pub user: SyncUser,
-    pub apps: Vec<SyncApp>,
-}
-
-/// `/client/sync` — the only endpoint that decides what a user may see, and it is built on
-/// `entitlements::apps_for_user` so the rule exists in exactly one place.
 pub async fn sync(
-    State(state): State<AppState>,
-    AuthUser(session): AuthUser,
+    state: axum::extract::State<AppState>,
+    KnownUser(user): KnownUser,
     Query(_params): Query<SyncQuery>,
 ) -> ApiResult<Json<SyncPayload>> {
-    let pool = pool_of(&state)?;
-
     let now = Utc::now();
-    let snapshot_days = settings::offline_grace_days(pool).await;
-    let sync_interval_hours = settings::sync_interval_hours(pool).await;
-    let revision = revision::current(pool).await?;
-    let announcement = settings::get::<Value>(pool, settings::ANNOUNCEMENT)
-        .await
-        .ok()
-        .flatten()
+    let data = state.store.read();
+
+    let snapshot_days = data.setting_i64("offline_grace_days", 7).max(0);
+    let sync_interval_hours = data.setting_i64("sync_interval_hours", 4);
+    let announcement = data
+        .setting("announcement")
+        .filter(|value| !value.is_null())
+        .cloned()
         .and_then(active_announcement);
 
-    let apps = entitlements::apps_for_user(pool, session.user.id)
-        .await?
+    let apps = entitlements::apps_for_user(&data, user.id)
         .into_iter()
         .filter(|app| app.offline_visible)
         .map(|app| SyncApp {
-            icon_url: app
-                .icon_etag
-                .as_ref()
-                .map(|_| format!("/api/v1/icons/{}", app.id)),
+            icon_url: if state.store.has_icon(app.id) {
+                Some(format!("/api/v1/icons/{}", app.id))
+            } else {
+                None
+            },
+            icon_etag: app.icon_etag.clone(),
             id: app.id,
             name: app.name,
             url: app.url,
@@ -94,22 +52,21 @@ pub async fn sync(
             color: app.color,
             sort_order: app.sort_order,
             offline_visible: app.offline_visible,
-            icon_etag: app.icon_etag,
             updated_at: app.updated_at,
         })
         .collect();
 
     Ok(Json(SyncPayload {
-        revision,
+        revision: data.revision,
         server_time: now,
-        offline_valid_until: now + Duration::days(snapshot_days.max(0)),
+        offline_valid_until: now + Duration::days(snapshot_days),
         snapshot_days,
         sync_interval_hours,
         announcement,
         user: SyncUser {
-            name: session.user.name,
-            department: session.user.department,
-            must_change_password: session.user.must_change_password,
+            name: user.name,
+            department: user.department,
+            must_change_password: false,
         },
         apps,
     }))
@@ -117,10 +74,6 @@ pub async fn sync(
 
 /// Drops an announcement whose active window has passed, or has not opened yet.
 fn active_announcement(value: Value) -> Option<Value> {
-    if value.is_null() {
-        return None;
-    }
-
     let object = value.as_object()?;
     let now = Utc::now();
 
@@ -131,7 +84,6 @@ fn active_announcement(value: Value) -> Option<Value> {
             }
         }
     }
-
     if let Some(to) = object.get("activeTo").and_then(Value::as_str) {
         if let Ok(to) = DateTime::parse_from_rfc3339(to) {
             if now > to.with_timezone(&Utc) {
@@ -139,6 +91,5 @@ fn active_announcement(value: Value) -> Option<Value> {
             }
         }
     }
-
     Some(value)
 }

@@ -1,43 +1,25 @@
 name: app-directory
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-appdir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-appdir}
-      TZ: ${TZ:-Asia/Kolkata}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    # No host port: the database is reachable only from the api container.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appdir} -d ${POSTGRES_DB:-appdir}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-appdir}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-appdir}
       APP_NAME: ${APP_NAME:-App Directory}
       RUST_LOG: ${RUST_LOG:-info}
-      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
-      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      DATA_DIR: /app/data
+      # Optional: point this at the portable client if it is not at the default path.
+      # CLIENT_EXE: /app/client/App Directory.exe
     ports:
-      # Bind to the LAN address only. Use 127.0.0.1 for local testing.
-      - "${API_BIND_IP:-127.0.0.1}:8090:8090"
+      # Publish on every interface so the LAN address (172.168.50.50) always works. Restrict
+      # access with the host firewall if the VM has more than one network.
+      - "0.0.0.0:8090:8090"
     volumes:
-      - ./backups:/backups
-
-volumes:
-  pgdata:
+      # All state lives here: users.csv, groups.csv, apps.csv, settings.csv, audit.csv,
+      # revision.csv and icons/. Hand-editing a file is picked up on the next request.
+      - ./data:/app/data
+      # Portable Windows client, served at /download/app-directory.exe. Place the .exe in
+      # the repo's release/ folder; no image rebuild is needed to publish a new client.
+      - ../release:/app/client:ro

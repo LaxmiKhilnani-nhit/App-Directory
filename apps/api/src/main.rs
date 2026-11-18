@@ -1,10 +1,11 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use tracing_subscriber::EnvFilter;
 
 use app_directory_api::config::Config;
 use app_directory_api::state::AppState;
-use app_directory_api::{build_router, db, domain};
+use app_directory_api::store::Store;
+use app_directory_api::build_router;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,26 +16,19 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::from_env();
-    let pool = db::connect_and_migrate(&config).await?;
-
-    if let Some(pool) = pool.as_ref() {
-        domain::seed::run(pool, &config).await?;
-    }
-
-    let state = AppState::new(config, pool);
+    let store = Arc::new(Store::open(&config.data_dir)?);
+    let state = AppState::new(config, store);
     let addr = format!("{}:{}", state.config.bind_addr, state.config.port);
 
     tracing::info!(
         bind = %addr,
         app = %state.config.app_name,
         admin_dist = %state.config.admin_dist.display(),
-        session_ttl_days = state.config.session_ttl_days,
-        "starting App Directory API"
+        data_dir = %state.config.data_dir.display(),
+        "starting App Directory API (CSV store, trusted Windows identity)"
     );
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-
-    // Connect info is what gives handlers the client IP for rate limiting and audit rows.
     axum::serve(
         listener,
         build_router(state).into_make_service_with_connect_info::<SocketAddr>(),
