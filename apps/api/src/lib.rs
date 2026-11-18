@@ -22,7 +22,7 @@ pub fn build_router(state: AppState) -> Router {
     let admin = static_assets::router(&state.config);
 
     Router::new()
-        .merge(http::router())
+        .merge(http::router(state.clone()))
         .with_state(state)
         .merge(admin)
         .layer(TraceLayer::new_for_http())

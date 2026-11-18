@@ -7,16 +7,14 @@ import { PageHeader, Notice } from "../components/PageHeader";
 import { useAsync } from "../hooks/useAsync";
 import { formatRelative } from "../utils/format";
 
-type TypeFilter = "all" | "manual" | "auto" | "all_users";
+type TypeFilter = "all" | "manual" | "auto";
 
 function groupKind(group: AdminGroup): Exclude<TypeFilter, "all"> {
-  if (group.isAllUsers) return "all_users";
   if (group.autoDepartment) return "auto";
   return "manual";
 }
 
 function KindBadge({ group }: { group: AdminGroup }) {
-  if (group.isAllUsers) return <Badge tone="accent">All users</Badge>;
   if (group.autoDepartment) return <Badge tone="warning">Auto · department</Badge>;
   return <Badge tone="neutral">Manual</Badge>;
 }
@@ -57,7 +55,7 @@ export function Groups() {
     <>
       <PageHeader
         title="Groups"
-        description="Manual lists, automatic department groups and the built-in All Users group."
+        description="Manual lists of people. Grant apps to a group to give every member access."
         actions={
           <Button variant="primary" onClick={() => setEditor({ group: null })}>
             New group
@@ -138,7 +136,7 @@ export function Groups() {
                     <td>
                       <div className="admin-table__actions">
                         <Button size="sm" onClick={() => setEditor({ group })}>
-                          {group.isAllUsers ? "View" : "Edit"}
+                          Edit
                         </Button>
                       </div>
                     </td>

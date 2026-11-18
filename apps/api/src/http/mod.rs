@@ -18,11 +18,11 @@ use crate::error::ApiError;
 use crate::state::AppState;
 
 /// All JSON API routes. Static assets are merged separately in `build_router`.
-pub fn router() -> Router<AppState> {
+pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .merge(health::router())
         .route("/download/app-directory.exe", get(download::get))
-        .merge(admin::router())
+        .merge(admin::router(state))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/me", get(auth::me))

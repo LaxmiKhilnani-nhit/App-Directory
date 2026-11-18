@@ -537,19 +537,21 @@ impl Store {
             .and_then(|text| text.trim().lines().next().unwrap_or("").trim().parse().ok())
             .unwrap_or(1);
 
-        // Structural defaults. Hand-edited files are never overwritten: we only insert rows
-        // that are missing.
-        if !data.groups.iter().any(|group| group.is_all_users) {
-            let now = Utc::now();
-            data.groups.push(GroupRow {
-                id: ALL_USERS_GROUP_ID,
-                name: ALL_USERS_GROUP.to_string(),
-                description: Some("Every active user".to_string()),
-                auto_department: None,
-                is_all_users: true,
-                created_at: now,
-                updated_at: now,
-            });
+        // Migration: the built-in "All Users" group is gone. Access must come from a
+        // department, an explicit group, or a direct grant to the person.
+        let all_users_ids: Vec<Uuid> = data
+            .groups
+            .iter()
+            .filter(|group| group.is_all_users)
+            .map(|group| group.id)
+            .collect();
+        if !all_users_ids.is_empty() {
+            data.groups
+                .retain(|group| !all_users_ids.contains(&group.id));
+            data.group_members
+                .retain(|member| !all_users_ids.contains(&member.group_id));
+            data.app_groups
+                .retain(|grant| !all_users_ids.contains(&grant.group_id));
         }
         for (key, value) in default_settings() {
             if !data.settings.iter().any(|setting| setting.key == key) {

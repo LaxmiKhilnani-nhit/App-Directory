@@ -133,11 +133,15 @@ edited by hand on the next request.
 
 The entitlement rule lives in `apps/api/src/domain/entitlements.rs`:
 
-> direct person grant **union** department grant (the user's department) **union** group
-> grant (explicit membership or All Users), for active users and enabled, non-deleted apps.
+> direct person grant **union** department grant (the user's department) **union** explicit
+> group grant, for active users and enabled, non-deleted apps.
 
-Departments are managed on their own screen; the user editor assigns one from a list. Renaming
-a department keeps its people and app grants.
+There is no built-in "All Users" group: it was removed so an IT user sees only IT apps, plus any
+special app granted directly to them (even if that app belongs to another department).
+
+Departments are managed on their own screen, including their apps — add a department and tick
+its apps in the same form. The user editor assigns one department from a list; renaming keeps
+its people and app grants.
 
 To move data out of the old PostgreSQL stack, run `scripts/export-to-csv.mjs` while the old API
 is still running, then switch to the CSV stack.
@@ -150,8 +154,9 @@ part to `<user>@<mail_domain>` (default `nhit.co.in`, editable in Settings). If 
 and is active in `users.csv`, `/client/sync` returns their apps; otherwise the client shows a
 "contact IT" screen.
 
-The admin portal keeps its sign-in page: `login`, `logout` and `me` endpoints return a dummy
-token and a super-admin identity so the existing route guards work.
+The admin portal keeps its sign-in page, but it is for administrators only: `super_admin` and
+`app_admin` accounts can log in, while a plain `user` account gets a 403 from `login` and every
+`/admin/*` endpoint. The token is a formality; the desktop client does not sign in at all.
 
 **The username is trusted as supplied.** Anyone on the LAN can claim another user's name and see
 their apps. This was accepted deliberately to keep the client sign-in-free. Do not expose port

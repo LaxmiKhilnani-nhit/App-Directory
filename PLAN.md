@@ -61,6 +61,7 @@ server, group and per-user grants, and an offline-capable client.
 | D13 | CSV files instead of PostgreSQL | Simpler deployment and backup; no database service in compose |
 | D14 | Portable self-update when `update_enabled = 1`, verified by SHA-256 | Keeps the single-exe model while allowing server-published versions |
 | D15 | Departments are first-class; apps are granted to departments, groups and people | Replaces "auto-by-department groups" as the way to grant to a whole department |
+| D16 | No built-in All Users group; admin portal restricted to admin roles | A user sees only their department, their groups and direct grants; staff cannot reach admin screens |
 
 The sections below describe the original design. Where they mention SQLx, PostgreSQL, bearer
 tokens, passwords, onboarding codes or "no self-update", D12–D14 now supersede them. The

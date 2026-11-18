@@ -10,6 +10,7 @@ use support::*;
 #[tokio::test]
 async fn settings_round_trip_and_revision_bump() {
     let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
     let identity = "ad\\admin";
     let (_, before) = get(&h, "/api/v1/admin/stats", Some(identity)).await;
     let revision_before = before["revision"].as_i64().unwrap();
@@ -22,23 +23,32 @@ async fn settings_round_trip_and_revision_bump() {
         json!({ "values": {
             "sync_interval_hours": 6,
             "announcement": { "text": "Payroll moves Monday", "level": "info" },
-            "mail_domain": "example.com"
+            "mail_domain": "nhit.co.in"
         }}),
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::OK, "{body}");
     assert!(body.as_array().is_some());
 
-    let (_, settings) = get(&h, "/api/v1/admin/settings", Some(identity)).await;
+    let (status, settings) = get(&h, "/api/v1/admin/settings", Some(identity)).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "settings: {settings}");
     let values: serde_json::Map<String, serde_json::Value> = settings
         .as_array()
         .unwrap()
         .iter()
-        .map(|row| (row["key"].as_str().unwrap().to_string(), row["value"].clone()))
+        .map(|row| {
+            (
+                row["key"].as_str().unwrap().to_string(),
+                row["value"].clone(),
+            )
+        })
         .collect();
     assert_eq!(values["sync_interval_hours"], json!(6));
-    assert_eq!(values["mail_domain"], json!("example.com"));
-    assert_eq!(values["announcement"]["text"], json!("Payroll moves Monday"));
+    assert_eq!(values["mail_domain"], json!("nhit.co.in"));
+    assert_eq!(
+        values["announcement"]["text"],
+        json!("Payroll moves Monday")
+    );
 
     let (_, after) = get(&h, "/api/v1/admin/stats", Some(identity)).await;
     assert_eq!(after["revision"].as_i64().unwrap(), revision_before + 1);
@@ -59,24 +69,21 @@ async fn settings_round_trip_and_revision_bump() {
     }
     let text = fs::read_to_string(h.dir.join("settings.csv")).unwrap();
     assert!(text.contains("sync_interval_hours"), "{text}");
-    assert!(text.contains("example.com"), "{text}");
+    assert!(text.contains("nhit.co.in"), "{text}");
 }
 
 #[tokio::test]
 async fn hand_edited_csv_is_reloaded() {
     let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
     let identity = "ad\\admin";
 
     let path = h.dir.join("settings.csv");
     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     let original = fs::read_to_string(&path).unwrap();
-    let edited = original.replace(
-        "\"sync_interval_hours\",4",
-        "\"sync_interval_hours\",12",
-    ).replace(
-        "sync_interval_hours,4",
-        "sync_interval_hours,12",
-    );
+    let edited = original
+        .replace("\"sync_interval_hours\",4", "\"sync_interval_hours\",12")
+        .replace("sync_interval_hours,4", "sync_interval_hours,12");
     assert_ne!(original, edited, "test fixture did not change the file");
     fs::write(&path, edited).unwrap();
 
@@ -94,6 +101,7 @@ async fn hand_edited_csv_is_reloaded() {
 #[tokio::test]
 async fn update_flag_is_driven_by_settings() {
     let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
     let identity = "ad\\admin";
 
     let (status, initial) = get(&h, "/api/v1/client/update", None).await;

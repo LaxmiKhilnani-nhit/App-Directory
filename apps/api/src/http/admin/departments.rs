@@ -141,6 +141,93 @@ pub async fn update(
     })
 }
 
+/// App ids currently granted to a department, for the edit form.
+pub async fn get_apps(
+    State(state): State<AppState>,
+    TrustedUser(_actor): TrustedUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<Uuid>>> {
+    let data = state.store.read();
+    if data.department_by_id(id).is_none() {
+        return Err(ApiError::not_found(
+            "department_not_found",
+            "No such department.",
+        ));
+    }
+    Ok(Json(
+        data.app_departments
+            .iter()
+            .filter(|grant| grant.department_id == id)
+            .map(|grant| grant.app_id)
+            .collect(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DepartmentApps {
+    #[serde(default)]
+    pub app_ids: Vec<Uuid>,
+}
+
+/// Replaces the apps granted to one department. This is the department-centric counterpart
+/// to `/admin/apps/{id}/departments`.
+pub async fn set_apps(
+    State(state): State<AppState>,
+    TrustedUser(actor): TrustedUser,
+    Path(id): Path<Uuid>,
+    body: Result<Json<DepartmentApps>, JsonRejection>,
+) -> ApiResult<Json<Department>> {
+    let request = json_body(body)?;
+    let mut app_ids = request.app_ids;
+    app_ids.dedup();
+
+    state.store.mutate(|data| {
+        let department = data
+            .department_by_id(id)
+            .ok_or_else(|| ApiError::not_found("department_not_found", "No such department."))?
+            .clone();
+
+        if !app_ids
+            .iter()
+            .all(|app_id| data.live_app_by_id(*app_id).is_some())
+        {
+            return Err(ApiError::bad_request(
+                "unknown_app",
+                "One of those apps no longer exists.",
+            ));
+        }
+
+        let before: Vec<Uuid> = data
+            .app_departments
+            .iter()
+            .filter(|grant| grant.department_id == id)
+            .map(|grant| grant.app_id)
+            .collect();
+
+        data.app_departments
+            .retain(|grant| grant.department_id != id);
+        data.app_departments
+            .extend(app_ids.iter().map(|app_id| crate::store::AppDepartmentRow {
+                app_id: *app_id,
+                department_id: id,
+            }));
+
+        data.bump_revision();
+        let view = Department::from_row(data.department_by_id(id).expect("exists"), data);
+        data.audit(
+            Some(actor.id),
+            Some(actor.email.clone()),
+            "department.apps",
+            "department",
+            Some(id),
+            Some(serde_json::json!({ "name": department.name, "appIds": before })),
+            Some(serde_json::json!({ "name": department.name, "appIds": app_ids })),
+        );
+        Ok(Json(view))
+    })
+}
+
 pub async fn delete(
     State(state): State<AppState>,
     TrustedUser(actor): TrustedUser,

@@ -6,10 +6,9 @@ use crate::store::Data;
 
 /// What a user may see, defined in one place.
 ///
-/// Effective access = direct user grants ∪ group grants, where group membership is either
-/// explicit (`group_members`), derived from `users.department` (auto-by-department groups),
-/// or implicit through the built-in All Users group. Inactive users and
-/// disabled/deleted apps never match.
+/// Effective access = direct person grants ∪ department grants ∪ explicit group grants.
+/// There is no built-in All Users group: a user only sees what their own department, their
+/// groups or a direct grant gives them. Inactive users and disabled/deleted apps never match.
 pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
     let Some(user) = data.user_by_id(user_id) else {
         return Vec::new();
@@ -22,7 +21,7 @@ pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
 
     for group in &data.groups {
         if group.is_all_users {
-            entitled_groups.insert(group.id);
+            // Retired: granting to everyone would break per-department isolation.
             continue;
         }
         if let Some(department) = group.auto_department.as_deref() {

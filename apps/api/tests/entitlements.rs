@@ -43,7 +43,16 @@ async fn department_grant_reaches_everyone_in_it() {
 
     assert_eq!(app_names(&h, "financeuser").await, vec!["Payroll"]);
     assert_eq!(app_names(&h, "roadsuser").await, vec!["Crm"]);
-    assert!(!in_finance.is_nil() && !in_roads.is_nil());
+
+    // A special direct grant crosses the department boundary without changing membership.
+    let special = add_app(&h, "Finance only", 5);
+    grant_user(&h, in_roads, special);
+    assert_eq!(
+        app_names(&h, "roadsuser").await,
+        vec!["Finance only", "Crm"]
+    );
+    assert_eq!(app_names(&h, "financeuser").await, vec!["Payroll"]);
+    assert!(!in_finance.is_nil());
 }
 
 #[tokio::test]
@@ -75,15 +84,16 @@ async fn auto_department_group_and_null_department() {
 }
 
 #[tokio::test]
-async fn all_users_group_grants_everyone() {
+async fn all_users_group_grants_no_one() {
     let h = setup();
     add_user(&h, "one", None, true);
     add_user(&h, "two", Some("HR"), true);
     let app = add_app(&h, "Leave portal", 10);
     grant_group(&h, app_directory_api::store::ALL_USERS_GROUP_ID, app);
 
-    assert_eq!(app_names(&h, "one").await, vec!["Leave portal"]);
-    assert_eq!(app_names(&h, "two").await, vec!["Leave portal"]);
+    // The built-in group is retired: it must never grant access on its own.
+    assert!(app_names(&h, "one").await.is_empty());
+    assert!(app_names(&h, "two").await.is_empty());
 }
 
 #[tokio::test]
@@ -99,7 +109,6 @@ async fn union_deduplicates_and_orders_by_sort_then_name() {
     for app in [zebra, beta, alpha] {
         grant_user(&h, user, app);
         grant_group(&h, group, app);
-        grant_group(&h, app_directory_api::store::ALL_USERS_GROUP_ID, app);
     }
 
     assert_eq!(app_names(&h, "both").await, vec!["Alpha", "Beta", "Zebra"]);

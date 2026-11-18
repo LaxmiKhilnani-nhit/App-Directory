@@ -138,21 +138,6 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
     }
   }
 
-  async function saveDepartments() {
-    if (!current) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const updated = await adminApi.setAppDepartments(current.id, [...selectedDepartments]);
-      resetAccessState(updated);
-      setNotice("Department access saved.");
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
   async function saveGroups() {
     if (!current) return;
     setBusy(true);
@@ -428,23 +413,28 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
                       label={department.name}
                       hint={`${department.userCount} people · ${department.appCount} apps`}
                       checked={selectedDepartments.has(department.id)}
-                      onChange={(checked) =>
-                        setSelectedDepartments((previous) => {
-                          const next = new Set(previous);
-                          if (checked) next.add(department.id);
-                          else next.delete(department.id);
-                          return next;
-                        })
-                      }
+                      onChange={(checked) => {
+                        const next = new Set(selectedDepartments);
+                        if (checked) next.add(department.id);
+                        else next.delete(department.id);
+                        setSelectedDepartments(next);
+                        if (!current) return;
+                        setBusy(true);
+                        adminApi
+                          .setAppDepartments(current.id, [...next])
+                          .then((updated) => {
+                            setCurrent(updated);
+                            setNotice("Department access saved.");
+                            onChanged(updated);
+                          })
+                          .catch((cause) => setError(errorMessage(cause)))
+                          .finally(() => setBusy(false));
+                      }}
                     />
                   ))
                 )}
               </div>
-              <div className="admin-actions">
-                <Button variant="primary" size="sm" onClick={saveDepartments} disabled={busy}>
-                  Save department access
-                </Button>
-              </div>
+              <p className="admin-inline-hint">Changes save automatically.</p>
             </div>
 
             <hr className="admin-divider" />

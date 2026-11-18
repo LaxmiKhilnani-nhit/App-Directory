@@ -126,6 +126,12 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  departmentApps: (id: string) => request<string[]>(`/api/v1/admin/departments/${id}/apps`),
+  setDepartmentApps: (id: string, appIds: string[]) =>
+    request<Department>(`/api/v1/admin/departments/${id}/apps`, {
+      method: "PUT",
+      body: JSON.stringify({ appIds }),
+    }),
   updateDepartment: (id: string, name: string) =>
     request<Department>(`/api/v1/admin/departments/${id}`, {
       method: "PATCH",

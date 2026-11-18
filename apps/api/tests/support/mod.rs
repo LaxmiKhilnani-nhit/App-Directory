@@ -74,6 +74,30 @@ pub fn add_user(h: &Harness, local: &str, department: Option<&str>, active: bool
     id
 }
 
+pub fn add_admin_user(h: &Harness, local: &str, role: &str) -> Uuid {
+    let now = Utc::now();
+    let id = Uuid::new_v4();
+    h.state
+        .store
+        .mutate(|data| {
+            data.users.push(UserRow {
+                id,
+                email: email(local),
+                name: local.to_string(),
+                department: Some("IT".to_string()),
+                role: role.to_string(),
+                admin_scope: None,
+                is_active: true,
+                must_change_password: false,
+                last_login_at: None,
+                created_at: now,
+                updated_at: now,
+            });
+            Ok(())
+        })
+        .expect("add admin user");
+    id
+}
 pub fn add_group(h: &Harness, name: &str, auto_department: Option<&str>) -> Uuid {
     let now = Utc::now();
     let id = Uuid::new_v4();

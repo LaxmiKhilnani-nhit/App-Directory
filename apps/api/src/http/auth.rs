@@ -70,6 +70,15 @@ pub async fn login(
         )
     })?;
 
+    // This login exists for the admin portal. Normal users use the desktop client, which
+    // does not sign in; refuse to hand them an admin token.
+    if !matches!(user.role.as_str(), "super_admin" | "app_admin") {
+        return Err(ApiError::forbidden(
+            "admin_only",
+            "This account is not an administrator.",
+        ));
+    }
+
     let now = Utc::now();
     let session = SessionUser::from(&user);
     let user_id = user.id;
