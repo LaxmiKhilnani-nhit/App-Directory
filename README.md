@@ -1,11 +1,12 @@
 # App Directory
 
-A portable Windows launcher plus a server-side admin portal. Staff sign in and see a tile
-grid of the in-house applications they are entitled to; the server only ever sends links the
-user is allowed to see. Access comes from per-user grants and group membership, all managed
-from the web portal — no client rebuild for content changes.
+A portable Windows launcher plus a server-side admin portal. Staff sign in automatically with
+their Windows username and see a tile grid of the applications they are entitled to. The server
+only ever sends links the user is allowed to see; access comes from per-user grants and group
+membership managed in the web portal.
 
-Full design, data model, API contract and phases: **[PLAN.md](./PLAN.md)**.
+Full design history: **[PLAN.md](./PLAN.md)**. Sections of that document that describe
+PostgreSQL, passwords, bearer tokens or "no self-update" are superseded by the notes below.
 
 ---
 
@@ -13,7 +14,7 @@ Full design, data model, API contract and phases: **[PLAN.md](./PLAN.md)**.
 
 ```
 apps/
-  api/       Rust (Axum) CSV-backed API, also serves the admin SPA at /admin
+  api/       Rust (Axum) CSV-backed API; serves the admin SPA at /admin
   admin/     React admin portal (Vite)
   desktop/   Tauri v2 + React launcher (Windows)
 packages/
@@ -26,7 +27,7 @@ infra/
   data/                runtime CSV files (gitignored)
   backups/             archived CSV snapshots
   scripts/             backup + VM diagnostics
-scripts/  icon generator, CSV migration exporter
+scripts/               icon generator, CSV migration exporter
 ```
 
 ## Prerequisites
@@ -38,20 +39,14 @@ scripts/  icon generator, CSV migration exporter
 | Rust | stable | `rustup default stable` |
 | MSVC Build Tools | 2022 | "Desktop development with C++" workload — required by Tauri |
 | WebView2 runtime | any | Preinstalled on Windows 11 |
-| Docker | 24+ | For the server stack |
+| Docker | 24+ | Server stack (one container) |
 
 ## Quick start
 
 ```powershell
 pnpm install
-pnpm icons          # regenerate placeholder icons (already committed)
-pnpm typecheck      # tsc across all packages
-```
-
-### Admin portal (dev)
-
-```powershell
-pnpm dev:admin      # http://localhost:5173/admin, proxies /api to 127.0.0.1:8090
+pnpm icons
+pnpm typecheck
 ```
 
 ### API (dev, no Docker)
@@ -63,6 +58,14 @@ cargo run
 # admin:  http://127.0.0.1:8090/admin
 ```
 
+### Admin portal (dev)
+
+```powershell
+pnpm dev:admin      # http://localhost:5173/admin, proxies /api to 127.0.0.1:8090
+```
+
+The portal keeps a sign-in screen for administrators. The desktop client does not sign in.
+
 ### API tests
 
 Tests use a temporary CSV directory; no database container is needed.
@@ -71,86 +74,131 @@ Tests use a temporary CSV directory; no database container is needed.
 cargo test --manifest-path apps/api/Cargo.toml
 ```
 
-### Desktop client
+### Desktop client (dev)
+
+```powershell
+pnpm dev:desktop            # browser preview at http://localhost:1420
+pnpm tauri dev              # real window (needs MSVC + WebView2)
+pnpm package:desktop        # release exe at release\App Directory.exe
+```
+
+The browser preview falls back to sample data because `invoke` is unavailable outside Tauri.
+
+## Server stack (Docker)
+
+```powershell
+docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+```
+
+The API binds `0.0.0.0:8090`, including the VM's LAN address `172.168.50.50`. PostgreSQL is
+gone; all state is in `infra/data/`. If port 8090 refuses connections, check
+`ss -ltnp | grep 8090` on the VM (`bash infra/scripts/check-server.sh` prints everything) before
+suspecting the application.
+
+### Backups
+
+```powershell
+.\infra\scripts\backup-db.ps1       # archives infra\data into infra\backups\appdir-<stamp>.zip
+.\infra\scripts\backup-db.ps1 -KeepDays 14
+```
+
+Schedule it on the VM with Task Scheduler. Restore by copying the CSV files back into
+`infra/data/` and restarting the container.
+
+### Client download from the server
+
+Place `release\App Directory.exe` on the server in `<repo>/release/`, then recreate the API
+container so the folder is mounted. Staff can download it from
+`http://172.168.50.50:8090/download/app-directory.exe`; there is a **Download client** link in
+the admin sidebar. No image rebuild is needed to publish a new client binary.
+
+## Data model
+
+All state lives in CSV files under `infra/data/` (plus `icons/<app_id>.bin` for icon bytes). The
+API loads them into memory, writes through a temporary file plus atomic rename, and reloads files
+edited by hand on the next request.
+
+| File | Purpose |
+|---|---|
+| `users.csv` | Accounts, name, email, department, role, active flag |
+| `groups.csv` | Manual groups, auto-by-department groups, built-in All Users |
+| `group_members.csv` | Explicit group membership |
+| `apps.csv` | Tiles: name, URL, category, order, enabled/visibility flags, icon metadata |
+| `app_groups.csv` / `user_apps.csv` | Group and direct-user grants |
+| `settings.csv` | Runtime config (sync interval, offline grace, announcement, identity, update flag) |
+| `audit.csv` | Admin changes with actor, entity and before/after JSON |
+| `revision.csv` | Single revision counter for client sync |
+
+The entitlement rule lives in `apps/api/src/domain/entitlements.rs`:
+
+> direct grant **union** grants via any group the user belongs to (explicit membership,
+> department match, or All Users), for active users and enabled, non-deleted apps.
+
+To move data out of the old PostgreSQL stack, run `scripts/export-to-csv.mjs` while the old API
+is still running, then switch to the CSV stack.
+
+## Authentication
+
+There is no password, session or onboarding code in the client. The desktop client runs
+`whoami` (`ad\laxmikhilnani.os`), sends it as `X-Windows-Identity`, and the server maps the local
+part to `<user>@<mail_domain>` (default `nhit.co.in`, editable in Settings). If the user exists
+and is active in `users.csv`, `/client/sync` returns their apps; otherwise the client shows a
+"contact IT" screen.
+
+The admin portal keeps its sign-in page: `login`, `logout` and `me` endpoints return a dummy
+token and a super-admin identity so the existing route guards work.
+
+**The username is trusted as supplied.** Anyone on the LAN can claim another user's name and see
+their apps. This was accepted deliberately to keep the client sign-in-free. Do not expose port
+8090 outside the office network.
+
+## Admin portal screens
+
+| Screen | Route | Contents |
+|---|---|---|
+| Sign in | `/admin/login` | admin-only entry point |
+| Dashboard | `/admin/dashboard` | counts and recent audit entries |
+| Applications | `/admin/apps` | table, create/edit drawer, icon upload/refetch, grants |
+| Groups | `/admin/groups` | manual and auto-by-department groups; All Users is built in |
+| Users & access | `/admin/users` | profile, role, direct grants, deactivate |
+| CSV import | `/admin/import` | paste CSV, validate, per-row errors, commit |
+| Settings | `/admin/settings` | app name, identity mapping, sync/offline, announcement, client update |
+| Audit log | `/admin/audit` | filters and expandable before/after JSON |
+
+## Desktop client
 
 The client is a single portable `.exe` that installs nothing. It keeps its state under
 `%LOCALAPPDATA%\AppDirectory`:
 
 | Path | Contents |
 |---|---|
-| `config.json` | schema version, last sync time, cached revision, "shortcuts created" flag |
+| `config.json` | schema version, last sync time, cached revision, shortcuts flag |
 | `cache.bin` | encrypted snapshot: magic header + AES-256-GCM ciphertext |
-| `icons\<app_id>.bin` | downloaded favicons, handed to the webview as data URLs |
-| `server.txt` | optional override for the server URL (no rebuild needed) |
+| `icons\<app_id>.bin` | cached favicons, handed to the webview as data URLs |
+| `server.txt` | optional override for the server URL |
 | `updates\` | staged update downloaded from the server |
 
-There is **no login screen**: the current Windows username is sent to the server on every
-request. The AES key for the offline cache is the only secret, held in Windows Credential
-Manager (`AppDirectory` / `snapshot-key`).
-
-- First launch writes `App Directory.lnk` to the desktop and Start menu, never overwriting an
-  existing shortcut. Release builds do it automatically; debug builds only with
-  `APPDIR_CREATE_SHORTCUTS=1`.
-- Sync runs at launch, every `sync_interval_hours` (default 4) and on demand (one manual refresh
-  per minute). When the server is unreachable the last snapshot renders with an offline banner
-  until `offline_valid_until`; after that a retry screen explains the situation.
+- First launch writes desktop and Start-menu shortcuts without overwriting existing ones.
+- Sync runs at launch, on the server's `sync_interval_hours` cadence, and on demand (once/minute).
+- Offline: last snapshot renders with a banner until `offline_valid_until`, then a retry screen.
 - Keyboard: `Ctrl+F` search, `Enter` opens the first match, `Esc` clears.
 
 ### Self-update
 
-When the server sets `update_enabled = 1` and an `update_version` in `settings.csv`, the client
-shows an **Update now** link. Clicking it downloads the exe from `update_url` (default
-`/download/app-directory.exe`), verifies its SHA-256 against `update_sha256`, moves the running
-exe aside as `App Directory.old.exe`, installs the new one, starts it and exits. Nothing is
-installed and the exe stays portable. A failed checksum leaves the old exe untouched.
-
-To publish a new client: replace `release/App Directory.exe` on the server, compute its SHA-256,
-then set `update_enabled`, `update_version` and `update_sha256` via `/api/v1/admin/settings` (or
-`POST /api/v1/admin/update/publish`).
-## Pre-rollout checks (2026-11-17)
-
-Measured against the dev stack with the packaged exe before the 400-user rollout:
-
-| Check | Result |
-|---|---|
-| CSV import, 400 new users plus 10 bad rows | 400 created, 10 row errors, ~13 s |
-| Users list at 400 accounts | 12 ms |
-| User search | 10 ms |
-| Group membership write | 16 ms |
-| One group grant | ~9 ms |
-| `/client/sync` for a user with 60 apps | 18.5 kB, 7-16 ms |
-| Offline cold start, server stopped | window opens, `cache.bin` left untouched |
-
-Two defects the pass turned up, both fixed: the CSV import rejected `All Users` and
-auto-by-department groups as unknown names, and the grant endpoints that replace a whole
-collection silently treated a mistyped field as "empty" instead of rejecting it. A 400-row
-import takes roughly 13 seconds, so day one should be started from the portal and allowed to
-finish.
-
-## Build status
-
-| Phase | Scope | State |
-|---|---|---|
-| 0 | Workspace scaffold, compose, API skeleton, Tauri shell | ✅ done |
-| 1 | Postgres schema + migrations + entitlement tests | ✅ done |
-| 2 | Auth, sessions, reset codes, audit | ✅ done |
-| 3 | Admin API (apps, groups, users, grants, settings) | ✅ done |
-| 4 | Admin SPA screens | ✅ done |
-| 5 | Client sync, cache, shortcuts, directory UI | ✅ done |
-| 6 | Packaging: portable `.exe`, first-run shortcuts | 🟡 built and smoke-tested; clean-VM check + Intune deferred |
-| 7 | CSV-only backend, trusted `whoami` identity, self-update | ✅ done |
-| 8 | 400-user rollout | ⬜ |
+With `update_enabled = 1` and an `update_version` in `settings.csv`, the client shows an
+**Update now** link. It downloads the exe, verifies SHA-256, moves the running exe to
+`App Directory.old.exe`, installs the new one, starts it and exits. A failed checksum leaves the
+old exe untouched. Publish by replacing `release\App Directory.exe` on the server and setting
+`update_enabled`, `update_version` and `update_sha256` in Settings.
 
 ## Known risk
 
-**Identity is trusted from `whoami`**: anyone with LAN access can claim another user's Windows
-name and see that user's apps. This was accepted deliberately to keep the client sign-in-free;
-hardening later (proxy-provided identity, signed device token) needs no UI change.
+Identity is trusted from `whoami` and transport is plain HTTP. Hardening (proxy-provided identity,
+TLS, code signing) can be added later without changing the UI. Do not expose port 8090 outside
+the office network.
 
-Transport is still **plain HTTP** while TLS is deferred, and there is no code signing, so
-SmartScreen may warn on first run. Do not expose port 8090 beyond the office network.
 ## Icon
 
 `pnpm icons` draws a placeholder mark and writes every size Tauri needs. Replace
-`apps/desktop/src-tauri/icons/*` and the two `favicon.png` files with the real brand icon
-when it is supplied.
+`apps/desktop/src-tauri/icons/*` and the two `favicon.png` files with the real brand icon when
+it is supplied.

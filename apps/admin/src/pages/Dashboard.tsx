@@ -22,7 +22,6 @@ export function Dashboard() {
           ["Users", `${stats.data.activeUsers}`, `${stats.data.users} total`],
           ["Apps", `${stats.data.enabledApps}`, `${stats.data.apps} total`],
           ["Groups", `${stats.data.groups}`, "manual + automatic"],
-          ["Open reset requests", `${stats.data.openResetRequests}`, "awaiting action"],
           ["Sign-ins today", `${stats.data.loginsToday}`, "accounts seen today"],
           ["Sync revision", `${stats.data.revision}`, "bumped on every change"],
         ]
@@ -62,14 +61,6 @@ export function Dashboard() {
             </div>
           ))}
         </div>
-      ) : null}
-
-      {isSuper && stats.data && stats.data.openResetRequests > 0 ? (
-        <Notice tone="info">
-          {stats.data.openResetRequests} password reset{" "}
-          {stats.data.openResetRequests === 1 ? "request is" : "requests are"} waiting.{" "}
-          <Link to="/reset-requests">Open the queue</Link>.
-        </Notice>
       ) : null}
 
       <section className="admin-card">

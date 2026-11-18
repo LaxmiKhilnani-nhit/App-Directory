@@ -16,15 +16,17 @@ pub async fn get(
     Ok(Json(Stats {
         users: data.users.len() as i64,
         active_users: data.users.iter().filter(|user| user.is_active).count() as i64,
-        apps: data.apps.iter().filter(|app| app.deleted_at.is_none()).count() as i64,
+        apps: data
+            .apps
+            .iter()
+            .filter(|app| app.deleted_at.is_none())
+            .count() as i64,
         enabled_apps: data
             .apps
             .iter()
             .filter(|app| app.deleted_at.is_none() && app.is_enabled)
             .count() as i64,
         groups: data.groups.len() as i64,
-        // Reset requests are no longer generated; the queue is always empty.
-        open_reset_requests: 0,
         logins_today: data
             .users
             .iter()

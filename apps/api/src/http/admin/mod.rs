@@ -1,12 +1,14 @@
 pub mod apps;
 pub mod audit;
 pub mod groups;
-pub mod reset;
 pub mod settings;
 pub mod stats;
 pub mod users;
 
-use axum::{routing::{get, post, put}, Json, Router};
+use axum::{
+    routing::{get, post, put},
+    Json, Router,
+};
 
 use crate::domain::models::AdminMe;
 use crate::http::identity::TrustedUser;
@@ -24,15 +26,26 @@ pub fn router() -> Router<AppState> {
             get(apps::get).patch(apps::update).delete(apps::delete),
         )
         .route("/api/v1/admin/apps/{id}/icon", post(apps::upload_icon))
-        .route("/api/v1/admin/apps/{id}/refetch-icon", post(apps::refetch_icon))
+        .route(
+            "/api/v1/admin/apps/{id}/refetch-icon",
+            post(apps::refetch_icon),
+        )
         .route("/api/v1/admin/apps/{id}/groups", put(apps::set_groups))
         .route("/api/v1/admin/apps/{id}/users", put(apps::set_users))
-        .route("/api/v1/admin/groups", get(groups::list).post(groups::create))
+        .route(
+            "/api/v1/admin/groups",
+            get(groups::list).post(groups::create),
+        )
         .route(
             "/api/v1/admin/groups/{id}",
-            get(groups::get).patch(groups::update).delete(groups::delete),
+            get(groups::get)
+                .patch(groups::update)
+                .delete(groups::delete),
         )
-        .route("/api/v1/admin/groups/{id}/members", put(groups::set_members))
+        .route(
+            "/api/v1/admin/groups/{id}/members",
+            put(groups::set_members),
+        )
         .route("/api/v1/admin/users", get(users::list).post(users::create))
         .route("/api/v1/admin/users/import", post(users::import))
         .route(
@@ -40,12 +53,10 @@ pub fn router() -> Router<AppState> {
             get(users::get).patch(users::update).delete(users::delete),
         )
         .route("/api/v1/admin/users/{id}/apps", put(users::set_apps))
-        .route("/api/v1/admin/users/{id}/reset-code", post(users::reset_code))
-        .route("/api/v1/admin/reset-requests", get(reset::list))
-        .route("/api/v1/admin/reset-requests/{id}/issue", post(reset::issue))
-        .route("/api/v1/admin/reset-requests/{id}/dismiss", post(reset::dismiss))
-        .route("/api/v1/admin/settings", get(settings::list).put(settings::update))
-        .route("/api/v1/admin/settings/test-email", post(settings::test_email))
+        .route(
+            "/api/v1/admin/settings",
+            get(settings::list).put(settings::update),
+        )
         .route("/api/v1/admin/audit", get(audit::list))
 }
 

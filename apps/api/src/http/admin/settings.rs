@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use axum::{
     extract::{rejection::JsonRejection, State},
-    http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -14,8 +13,6 @@ use crate::error::{ApiError, ApiResult};
 use crate::http::identity::TrustedUser;
 use crate::http::json_body;
 use crate::state::AppState;
-
-const PASSWORD_MASK: &str = "********";
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateRequest {
@@ -151,13 +148,6 @@ fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
         "update_version" => optional_string(value, key, 120),
         "update_sha256" => optional_string(value, key, 128),
         "update_url" => optional_string(value, key, 500),
-        "smtp_enabled" | "smtp_starttls" => require_flag(value, key),
-        "smtp_port" => require_int(value, key, 1, 65535),
-        "smtp_host" => optional_string(value, key, 253),
-        "smtp_username" => optional_string(value, key, 320),
-        "smtp_password" => optional_string(value, key, 512),
-        "smtp_from_email" => optional_string(value, key, 320),
-        "smtp_from_name" => optional_string(value, key, 120),
         other => Err(ApiError::bad_request(
             "unknown_setting",
             format!("{other} is not a setting this server knows."),
@@ -165,25 +155,12 @@ fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
     }
 }
 
-fn masked(data: &crate::store::Data) -> Vec<Setting> {
-    data.settings
-        .iter()
-        .map(|row| {
-            let mut setting = Setting::from(row);
-            if setting.key == "smtp_password" && !setting.value.as_str().unwrap_or("").is_empty() {
-                setting.value = json!(PASSWORD_MASK);
-            }
-            setting
-        })
-        .collect()
-}
-
 pub async fn list(
     State(state): State<AppState>,
     TrustedUser(_actor): TrustedUser,
 ) -> ApiResult<Json<Vec<Setting>>> {
     let data = state.store.read();
-    let mut settings = masked(&data);
+    let mut settings: Vec<Setting> = data.settings.iter().map(Setting::from).collect();
     settings.sort_by(|left, right| left.key.cmp(&right.key));
     Ok(Json(settings))
 }
@@ -206,9 +183,6 @@ pub async fn update(
 
     let mut validated: Vec<(String, Value)> = Vec::with_capacity(incoming.len());
     for (key, value) in incoming {
-        if key == "smtp_password" && value.as_str() == Some(PASSWORD_MASK) {
-            continue;
-        }
         validated.push((key.clone(), validate(key, value)?));
     }
 
@@ -256,19 +230,4 @@ pub async fn update(
     })?;
 
     list(State(state), TrustedUser(actor.clone())).await
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TestEmailRequest {
-    #[allow(dead_code)]
-    pub email: String,
-}
-
-/// SMTP delivery is no longer part of this API. Keep the endpoint as a no-op so the
-/// settings screen's "send test email" button stays harmless.
-pub async fn test_email(
-    body: Result<Json<TestEmailRequest>, JsonRejection>,
-) -> StatusCode {
-    let _ = json_body(body);
-    StatusCode::NO_CONTENT
 }

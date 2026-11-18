@@ -15,7 +15,6 @@ use serde::Deserialize;
 use crate::domain::models::{LoginResponse, SessionUser};
 use crate::error::{ApiError, ApiResult};
 use crate::http::identity::{self, TrustedUser};
-use crate::http::json_body;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -104,26 +103,7 @@ pub async fn me(TrustedUser(user): TrustedUser) -> Json<SessionUser> {
     Json(user)
 }
 
-/// No sessions exist, so there is nothing to revoke. The SPA just needs a 2xx.
+/// No sessions exist, so there is nothing to revoke. The admin SPA just needs a 2xx.
 pub async fn logout() -> StatusCode {
-    StatusCode::NO_CONTENT
-}
-
-/// Passwords are not stored or checked any more. These endpoints stay as no-ops so the
-/// change-password and forgot-password screens do not break.
-pub async fn change_password(
-    body: Result<Json<serde_json::Value>, JsonRejection>,
-) -> StatusCode {
-    let _ = json_body(body);
-    StatusCode::NO_CONTENT
-}
-
-pub async fn forgot(body: Result<Json<serde_json::Value>, JsonRejection>) -> StatusCode {
-    let _ = json_body(body);
-    StatusCode::ACCEPTED
-}
-
-pub async fn reset(body: Result<Json<serde_json::Value>, JsonRejection>) -> StatusCode {
-    let _ = json_body(body);
     StatusCode::NO_CONTENT
 }

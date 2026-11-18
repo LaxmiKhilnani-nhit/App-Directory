@@ -23,9 +23,9 @@ function toLocalInput(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const pad = (input: number) => String(input).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function fromLocalInput(value: string): string | undefined {
@@ -41,13 +41,7 @@ function previewClass(level: Announcement["level"]): string {
   return "admin-notice";
 }
 
-const NUMBER_FIELDS: Array<{
-  key: string;
-  label: string;
-  min: number;
-  max: number;
-  hint?: string;
-}> = [
+const NUMBER_FIELDS: Array<{ key: string; label: string; min: number; max: number; hint?: string }> = [
   { key: "sync_interval_hours", label: "Sync interval (hours)", min: 1, max: 168 },
   {
     key: "offline_grace_days",
@@ -56,15 +50,6 @@ const NUMBER_FIELDS: Array<{
     max: 90,
     hint: "0 disables offline use.",
   },
-  { key: "password_min_length", label: "Minimum password length", min: 8, max: 200 },
-  {
-    key: "login_lockout_attempts",
-    label: "Failed sign-ins before lockout",
-    min: 0,
-    max: 100,
-    hint: "0 disables lockout.",
-  },
-  { key: "login_lockout_minutes", label: "Lockout duration (minutes)", min: 1, max: 1440 },
 ];
 
 export function Settings() {
@@ -72,28 +57,17 @@ export function Settings() {
 
   const [appName, setAppName] = useState("App Directory");
   const [numbers, setNumbers] = useState<Record<string, string>>({});
+  const [mailDomain, setMailDomain] = useState("nhit.co.in");
+  const [defaultIdentity, setDefaultIdentity] = useState("");
   const [announcementEnabled, setAnnouncementEnabled] = useState(false);
   const [announcementText, setAnnouncementText] = useState("");
   const [announcementLevel, setAnnouncementLevel] = useState<Announcement["level"]>("info");
   const [announcementFrom, setAnnouncementFrom] = useState("");
   const [announcementTo, setAnnouncementTo] = useState("");
-
-  const [smtpEnabled, setSmtpEnabled] = useState(false);
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpUsername, setSmtpUsername] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [smtpFromEmail, setSmtpFromEmail] = useState("");
-  const [smtpFromName, setSmtpFromName] = useState("App Directory");
-  const [smtpStarttls, setSmtpStarttls] = useState(true);
-
   const [updateEnabled, setUpdateEnabled] = useState(false);
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateSha256, setUpdateSha256] = useState("");
   const [updateUrl, setUpdateUrl] = useState("");
-  const [testAddress, setTestAddress] = useState("");
-  const [testing, setTesting] = useState(false);
-
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +85,8 @@ export function Settings() {
         ]),
       ),
     );
+    setMailDomain(asText(settingValue(settings.data, "mail_domain"), "nhit.co.in"));
+    setDefaultIdentity(asText(settingValue(settings.data, "default_identity"), ""));
 
     const raw = settingValue(settings.data, "announcement");
     const banner = raw && typeof raw === "object" ? (raw as Announcement) : null;
@@ -119,15 +95,6 @@ export function Settings() {
     setAnnouncementLevel(banner?.level ?? "info");
     setAnnouncementFrom(toLocalInput(banner?.activeFrom));
     setAnnouncementTo(toLocalInput(banner?.activeTo));
-
-    setSmtpEnabled(settingValue(settings.data, "smtp_enabled") === true);
-    setSmtpHost(asText(settingValue(settings.data, "smtp_host"), ""));
-    setSmtpPort(asText(settingValue(settings.data, "smtp_port"), "587"));
-    setSmtpUsername(asText(settingValue(settings.data, "smtp_username"), ""));
-    setSmtpPassword(asText(settingValue(settings.data, "smtp_password"), ""));
-    setSmtpFromEmail(asText(settingValue(settings.data, "smtp_from_email"), ""));
-    setSmtpFromName(asText(settingValue(settings.data, "smtp_from_name"), "App Directory"));
-    setSmtpStarttls(settingValue(settings.data, "smtp_starttls") !== false);
 
     setUpdateEnabled(settingValue(settings.data, "update_enabled") === 1);
     setUpdateVersion(asText(settingValue(settings.data, "update_version"), ""));
@@ -144,7 +111,11 @@ export function Settings() {
     setError(null);
     setNotice(null);
 
-    const values: Record<string, unknown> = { app_name: appName.trim() };
+    const values: Record<string, unknown> = {
+      app_name: appName.trim(),
+      mail_domain: mailDomain.trim(),
+      default_identity: defaultIdentity.trim(),
+    };
 
     for (const field of NUMBER_FIELDS) {
       const parsed = Number(numbers[field.key]);
@@ -170,31 +141,7 @@ export function Settings() {
       values.announcement = null;
     }
 
-    const port = Number(smtpPort);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      setError("SMTP port must be a whole number between 1 and 65535.");
-      return;
-    }
-    if (smtpEnabled) {
-      if (!smtpHost.trim() || !smtpFromEmail.trim()) {
-        setError("SMTP host and From address are required when email is enabled.");
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtpFromEmail.trim())) {
-        setError("Enter a valid From address.");
-        return;
-      }
-    }
-
     Object.assign(values, {
-      smtp_enabled: smtpEnabled,
-      smtp_host: smtpHost.trim(),
-      smtp_port: port,
-      smtp_username: smtpUsername.trim(),
-      smtp_password: smtpPassword,
-      smtp_from_email: smtpFromEmail.trim(),
-      smtp_from_name: smtpFromName.trim(),
-      smtp_starttls: smtpStarttls,
       update_enabled: updateEnabled ? 1 : 0,
       update_version: updateVersion.trim(),
       update_sha256: updateSha256.trim(),
@@ -213,24 +160,6 @@ export function Settings() {
     }
   }
 
-  async function sendTest() {
-    setError(null);
-    setNotice(null);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testAddress.trim())) {
-      setError("Enter a valid address to send the test email to.");
-      return;
-    }
-    setTesting(true);
-    try {
-      await adminApi.testEmail(testAddress.trim());
-      setNotice(`Test email sent to ${testAddress.trim()}.`);
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setTesting(false);
-    }
-  }
-
   const lastUpdated = (settings.data ?? [])
     .map((setting) => setting.updatedAt)
     .sort()
@@ -240,7 +169,7 @@ export function Settings() {
     <>
       <PageHeader
         title="Settings"
-        description="Client sync behaviour, the sign-in policy and the announcement banner."
+        description="Client sync, identity mapping, the announcement banner and client updates."
         actions={
           <Button variant="primary" onClick={save} disabled={busy || !loaded}>
             {busy ? "Saving…" : "Save settings"}
@@ -274,9 +203,32 @@ export function Settings() {
           </section>
 
           <section className="admin-card">
+            <h2 className="admin-card__title">Identity</h2>
+            <p className="admin-inline-hint" style={{ marginTop: "var(--space-2)" }}>
+              The client sends the current Windows username (for example <code>ad\user</code>).
+              The server turns the part after the backslash into an email using this domain.
+            </p>
+            <div className="admin-form-grid" style={{ marginTop: "var(--space-3)" }}>
+              <TextField
+                label="Email domain"
+                value={mailDomain}
+                onChange={(event) => setMailDomain(event.target.value)}
+                maxLength={253}
+              />
+              <TextField
+                label="Fallback identity (optional)"
+                value={defaultIdentity}
+                onChange={(event) => setDefaultIdentity(event.target.value)}
+                maxLength={253}
+                hint="Used when a caller does not send a Windows identity."
+              />
+            </div>
+          </section>
+
+          <section className="admin-card">
             <h2 className="admin-card__title">Sync & offline</h2>
             <div className="admin-form-grid" style={{ marginTop: "var(--space-3)" }}>
-              {NUMBER_FIELDS.slice(0, 2).map((field) => (
+              {NUMBER_FIELDS.map((field) => (
                 <TextField
                   key={field.key}
                   label={field.label}
@@ -288,114 +240,6 @@ export function Settings() {
                   hint={field.hint}
                 />
               ))}
-            </div>
-          </section>
-
-          <section className="admin-card">
-            <h2 className="admin-card__title">Sign-in policy</h2>
-            <div className="admin-form-grid" style={{ marginTop: "var(--space-3)" }}>
-              {NUMBER_FIELDS.slice(2).map((field) => (
-                <TextField
-                  key={field.key}
-                  label={field.label}
-                  type="number"
-                  min={field.min}
-                  max={field.max}
-                  value={numbers[field.key] ?? ""}
-                  onChange={(event) => setNumber(field.key, event.target.value)}
-                  hint={field.hint}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section className="admin-card">
-            <div className="admin-pagehead">
-              <h2 className="admin-card__title">Onboarding email (SMTP)</h2>
-              <Badge tone={smtpEnabled ? "success" : "neutral"}>
-                {smtpEnabled ? "Enabled" : "Off"}
-              </Badge>
-            </div>
-            <p className="admin-inline-hint" style={{ marginTop: "var(--space-2)" }}>
-              When enabled, a new account's one-time onboarding code is emailed to the user. If the
-              server cannot send, the code is still shown in the portal. Codes are never stored in
-              plain text.
-            </p>
-            <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
-              <CheckboxField
-                label="Email onboarding codes to new users"
-                checked={smtpEnabled}
-                onChange={setSmtpEnabled}
-              />
-              {smtpEnabled ? (
-                <>
-                  <div className="admin-form-grid">
-                    <TextField
-                      label="SMTP host"
-                      value={smtpHost}
-                      onChange={(event) => setSmtpHost(event.target.value)}
-                      placeholder="smtp.office365.com"
-                      maxLength={253}
-                    />
-                    <TextField
-                      label="SMTP port"
-                      type="number"
-                      min={1}
-                      max={65535}
-                      value={smtpPort}
-                      onChange={(event) => setSmtpPort(event.target.value)}
-                      hint="587 with STARTTLS, or 465 for implicit TLS."
-                    />
-                    <TextField
-                      label="Username"
-                      value={smtpUsername}
-                      onChange={(event) => setSmtpUsername(event.target.value)}
-                      maxLength={320}
-                    />
-                    <TextField
-                      label="Password"
-                      type="password"
-                      value={smtpPassword}
-                      onChange={(event) => setSmtpPassword(event.target.value)}
-                      maxLength={512}
-                      hint="Stored on the server. The portal only ever receives a mask."
-                    />
-                    <TextField
-                      label="From address"
-                      type="email"
-                      value={smtpFromEmail}
-                      onChange={(event) => setSmtpFromEmail(event.target.value)}
-                      maxLength={320}
-                    />
-                    <TextField
-                      label="From name"
-                      value={smtpFromName}
-                      onChange={(event) => setSmtpFromName(event.target.value)}
-                      maxLength={120}
-                    />
-                  </div>
-                  <CheckboxField
-                    label="Use STARTTLS (port 587)"
-                    checked={smtpStarttls}
-                    onChange={setSmtpStarttls}
-                    hint="Turn off only for a local test server."
-                  />
-                  <div className="admin-form-grid">
-                    <TextField
-                      label="Send a test email to"
-                      type="email"
-                      value={testAddress}
-                      onChange={(event) => setTestAddress(event.target.value)}
-                      placeholder="you@company.com"
-                    />
-                    <div style={{ alignSelf: "end" }}>
-                      <Button variant="secondary" onClick={sendTest} disabled={testing}>
-                        {testing ? "Sending…" : "Send test email"}
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : null}
             </div>
           </section>
 
@@ -455,11 +299,9 @@ export function Settings() {
             <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
               <CheckboxField
                 label="Show a banner in the client"
-                hint="Useful for maintenance windows and important notices."
                 checked={announcementEnabled}
                 onChange={setAnnouncementEnabled}
               />
-
               {announcementEnabled ? (
                 <>
                   <TextAreaField
@@ -467,9 +309,7 @@ export function Settings() {
                     value={announcementText}
                     onChange={(event) => setAnnouncementText(event.target.value)}
                     maxLength={300}
-                    placeholder="Payroll will be unavailable on Saturday morning."
                   />
-
                   <div className="admin-form-grid">
                     <SelectField
                       label="Tone"
@@ -482,14 +322,12 @@ export function Settings() {
                       <option value="warning">Warning</option>
                       <option value="critical">Critical</option>
                     </SelectField>
-
                     <TextField
                       label="Starts at (optional)"
                       type="datetime-local"
                       value={announcementFrom}
                       onChange={(event) => setAnnouncementFrom(event.target.value)}
                     />
-
                     <TextField
                       label="Ends at (optional)"
                       type="datetime-local"
@@ -497,7 +335,6 @@ export function Settings() {
                       onChange={(event) => setAnnouncementTo(event.target.value)}
                     />
                   </div>
-
                   <div className={previewClass(announcementLevel)}>
                     <strong>Preview:</strong>{" "}
                     {announcementText.trim() || "Your message appears here."}

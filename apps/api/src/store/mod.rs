@@ -70,16 +70,6 @@ pub fn default_settings() -> Vec<(&'static str, Value)> {
         ("update_version", json!("")),
         ("update_sha256", json!("")),
         ("update_url", json!("/download/app-directory.exe")),
-        // Kept so the admin settings screen and SMTP configuration stay compatible; no codes
-        // or emails are generated any more.
-        ("smtp_enabled", json!(false)),
-        ("smtp_host", json!("")),
-        ("smtp_port", json!(587)),
-        ("smtp_username", json!("")),
-        ("smtp_password", json!("")),
-        ("smtp_from_email", json!("")),
-        ("smtp_from_name", json!("App Directory")),
-        ("smtp_starttls", json!(true)),
     ]
 }
 
@@ -153,11 +143,16 @@ impl Store {
     /// Returns a read guard, reloading from disk first if any watched file changed.
     pub fn read(&self) -> RwLockReadGuard<'_, Data> {
         self.maybe_reload();
-        self.data.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.data
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Runs a mutation against a fresh snapshot and persists every file on success.
-    pub fn mutate<T>(&self, change: impl FnOnce(&mut Data) -> Result<T, ApiError>) -> Result<T, ApiError> {
+    pub fn mutate<T>(
+        &self,
+        change: impl FnOnce(&mut Data) -> Result<T, ApiError>,
+    ) -> Result<T, ApiError> {
         let _write_guard = self.write_mutex.lock().unwrap_or_else(|p| p.into_inner());
 
         let signatures = Self::signatures(&self.dir);
@@ -191,7 +186,9 @@ impl Store {
 
         match Self::load_from(&self.dir, signatures) {
             Ok(fresh) => *data = fresh,
-            Err(error) => tracing::warn!(%error, "could not reload CSV files; keeping last snapshot"),
+            Err(error) => {
+                tracing::warn!(%error, "could not reload CSV files; keeping last snapshot")
+            }
         }
     }
 
@@ -248,7 +245,11 @@ impl Store {
                 models::dt_str(row.created_at),
             ]);
         }
-        csv::write_rows(&dir.join(GROUP_MEMBERS), header_for(GROUP_MEMBERS), &members)?;
+        csv::write_rows(
+            &dir.join(GROUP_MEMBERS),
+            header_for(GROUP_MEMBERS),
+            &members,
+        )?;
 
         let mut apps = Vec::new();
         for row in &data.apps {
@@ -327,7 +328,10 @@ impl Store {
         Ok(())
     }
 
-    fn load_from(dir: &Path, signatures: HashMap<String, Option<SystemTime>>) -> anyhow::Result<Data> {
+    fn load_from(
+        dir: &Path,
+        signatures: HashMap<String, Option<SystemTime>>,
+    ) -> anyhow::Result<Data> {
         let mut data = Data {
             signatures,
             ..Data::default()

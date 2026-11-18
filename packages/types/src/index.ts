@@ -153,30 +153,6 @@ export interface UserPage {
   total: number;
 }
 
-export interface IssuedCode {
-  code: string;
-  expiresAt: string;
-  /** True when the server emailed the code; otherwise the admin must share it. */
-  emailed: boolean;
-}
-
-export interface ResetRequest {
-  id: string;
-  userId: string;
-  email: string;
-  name: string;
-  status: "open" | "issued" | "dismissed";
-  createdAt: string;
-  resolvedAt: string | null;
-}
-
-export interface OnboardingCode {
-  email: string;
-  code: string;
-  expiresAt: string;
-  emailed: boolean;
-}
-
 export interface ImportErrorRow {
   line: number;
   email: string | null;
@@ -188,7 +164,6 @@ export interface ImportReport {
   updated: number;
   unchanged: number;
   errors: ImportErrorRow[];
-  onboarding: OnboardingCode[];
 }
 
 export interface AuditRow {

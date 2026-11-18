@@ -25,7 +25,6 @@ export function demoSnapshot(): Snapshot {
     user: {
       name: "Preview User",
       department: "Finance",
-      mustChangePassword: false,
     },
     apps: [
       {

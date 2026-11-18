@@ -46,16 +46,25 @@ pub async fn install(api: &ApiClient, info: &UpdateInfo) -> Result<(), CommandEr
 
     let updates_dir = config::data_dir().join("updates");
     fs::create_dir_all(&updates_dir).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not create the update folder: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not create the update folder: {error}"),
+        )
     })?;
 
     let staged = updates_dir.join("App Directory.exe");
     fs::write(&staged, &bytes).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not stage the update: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not stage the update: {error}"),
+        )
     })?;
 
     let current = std::env::current_exe().map_err(|error| {
-        CommandError::new("update_failed", format!("Could not locate the running exe: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not locate the running exe: {error}"),
+        )
     })?;
     let backup = current.with_file_name("App Directory.old.exe");
 

@@ -111,22 +111,4 @@ export const api = {
   me: () => request<SessionUser>("/api/v1/auth/me"),
 
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
-
-  changePassword: (currentPassword: string, newPassword: string) =>
-    request<void>("/api/v1/auth/change-password", {
-      method: "POST",
-      body: JSON.stringify({ currentPassword, newPassword }),
-    }),
-
-  forgot: (email: string) =>
-    request<void>("/api/v1/auth/forgot", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
-
-  reset: (email: string, code: string, newPassword: string) =>
-    request<void>("/api/v1/auth/reset", {
-      method: "POST",
-      body: JSON.stringify({ email, code, newPassword }),
-    }),
 };

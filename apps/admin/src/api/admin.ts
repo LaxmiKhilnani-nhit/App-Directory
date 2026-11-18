@@ -6,8 +6,6 @@ import type {
   AuditPage,
   GroupDetail,
   ImportReport,
-  IssuedCode,
-  ResetRequest,
   Setting,
   Stats,
   UserDetail,
@@ -154,30 +152,13 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ appIds }),
     }),
-  issueResetCode: (id: string, purpose: "onboard" | "reset") =>
-    request<IssuedCode>(`/api/v1/admin/users/${id}/reset-code`, {
-      method: "POST",
-      body: JSON.stringify({ purpose }),
-    }),
   importUsers: (csv: string) =>
     request<ImportReport>("/api/v1/admin/users/import", {
       method: "POST",
       body: JSON.stringify({ csv }),
     }),
 
-  resetRequests: (status: string | null = "open") =>
-    request<ResetRequest[]>(`/api/v1/admin/reset-requests${queryString({ status })}`),
-  issueResetRequest: (id: string) =>
-    request<IssuedCode>(`/api/v1/admin/reset-requests/${id}/issue`, { method: "POST" }),
-  dismissResetRequest: (id: string) =>
-    request<void>(`/api/v1/admin/reset-requests/${id}/dismiss`, { method: "POST" }),
-
   settings: () => request<Setting[]>("/api/v1/admin/settings"),
-  testEmail: (email: string) =>
-    request<void>("/api/v1/admin/settings/test-email", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
   updateSettings: (values: Record<string, unknown>) =>
     request<Setting[]>("/api/v1/admin/settings", {
       method: "PUT",

@@ -31,7 +31,6 @@ export interface IdentityState {
 export interface SnapshotUser {
   name: string;
   department: string | null;
-  mustChangePassword: boolean;
 }
 
 export interface Snapshot {

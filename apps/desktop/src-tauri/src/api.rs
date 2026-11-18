@@ -16,7 +16,6 @@ use crate::identity;
 pub struct SyncUser {
     pub name: String,
     pub department: Option<String>,
-    pub must_change_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +52,6 @@ pub struct SyncPayload {
 pub struct SessionUser {
     pub name: String,
     pub department: Option<String>,
-    pub must_change_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,10 +156,7 @@ impl ApiClient {
 
     pub async fn session_user(&self, timeout: Duration) -> Result<SessionUser, CommandError> {
         let response = self
-            .send(
-                self.http.get(self.url("/api/v1/auth/me")),
-                Some(timeout),
-            )
+            .send(self.http.get(self.url("/api/v1/auth/me")), Some(timeout))
             .await?;
 
         let status = response.status();
@@ -199,9 +194,7 @@ impl ApiClient {
             request = request.header(reqwest::header::IF_NONE_MATCH, etag);
         }
 
-        let response = self
-            .send(request, Some(Duration::from_secs(15)))
-            .await?;
+        let response = self.send(request, Some(Duration::from_secs(15))).await?;
         let status = response.status();
 
         if status == reqwest::StatusCode::NOT_MODIFIED {

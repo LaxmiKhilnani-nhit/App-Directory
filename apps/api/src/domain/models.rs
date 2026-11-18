@@ -259,27 +259,10 @@ pub struct UserPage {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IssuedCode {
-    pub code: String,
-    pub expires_at: DateTime<Utc>,
-    pub emailed: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ImportErrorRow {
     pub line: usize,
     pub email: Option<String>,
     pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OnboardingCode {
-    pub email: String,
-    pub code: String,
-    pub expires_at: DateTime<Utc>,
-    pub emailed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -289,7 +272,6 @@ pub struct ImportReport {
     pub updated: i64,
     pub unchanged: i64,
     pub errors: Vec<ImportErrorRow>,
-    pub onboarding: Vec<OnboardingCode>,
 }
 
 #[derive(Debug, Serialize)]
@@ -357,19 +339,6 @@ pub struct Stats {
     pub apps: i64,
     pub enabled_apps: i64,
     pub groups: i64,
-    pub open_reset_requests: i64,
     pub logins_today: i64,
     pub revision: i64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResetRequest {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub email: String,
-    pub name: String,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub resolved_at: Option<DateTime<Utc>>,
 }

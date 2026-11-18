@@ -42,3 +42,5 @@ coverage/
 
 # CSV runtime state (contains user data)
 infra/data/
+
+infra/backups/*.zip

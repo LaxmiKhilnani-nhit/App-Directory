@@ -14,7 +14,6 @@ const NAV: NavItem[] = [
   { to: "/groups", label: "Groups", superOnly: true },
   { to: "/users", label: "Users", superOnly: true },
   { to: "/import", label: "CSV import", superOnly: true },
-  { to: "/reset-requests", label: "Reset queue", superOnly: true },
   { to: "/settings", label: "Settings", superOnly: true },
   { to: "/audit", label: "Audit log", superOnly: true },
 ];

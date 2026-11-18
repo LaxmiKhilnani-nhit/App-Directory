@@ -5,13 +5,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::domain::models::{
-    AdminUser, ImportErrorRow, ImportReport, IssuedCode, UserDetail, UserPage,
-};
+use crate::domain::models::{AdminUser, ImportErrorRow, ImportReport, UserDetail, UserPage};
 use crate::domain::validate;
 use crate::error::{ApiError, ApiResult};
 use crate::http::identity::TrustedUser;
@@ -99,13 +97,19 @@ pub async fn list(
         .users
         .iter()
         .filter(|user| match &needle {
-            Some(text) => user.email.to_lowercase().contains(text) || user.name.to_lowercase().contains(text),
+            Some(text) => {
+                user.email.to_lowercase().contains(text) || user.name.to_lowercase().contains(text)
+            }
             None => true,
         })
         .filter(|user| params.role.as_deref().is_none_or(|role| user.role == role))
         .filter(|user| params.active.is_none_or(|active| user.is_active == active))
         .collect();
-    users.sort_by(|left, right| left.name.cmp(&right.name).then_with(|| left.email.cmp(&right.email)));
+    users.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.email.cmp(&right.email))
+    });
 
     let total = users.len() as i64;
     let offset = params.offset.unwrap_or(0).max(0) as usize;
@@ -230,7 +234,11 @@ pub async fn update(
 
         let before_view = AdminUser::from(&before);
         {
-            let user = data.users.iter_mut().find(|user| user.id == id).expect("exists");
+            let user = data
+                .users
+                .iter_mut()
+                .find(|user| user.id == id)
+                .expect("exists");
             user.name = name;
             user.department = department;
             user.role = role;
@@ -265,7 +273,11 @@ pub async fn delete(
             .ok_or_else(|| ApiError::not_found("user_not_found", "That user no longer exists."))?
             .clone();
         let before_view = AdminUser::from(&before);
-        let user = data.users.iter_mut().find(|user| user.id == id).expect("exists");
+        let user = data
+            .users
+            .iter_mut()
+            .find(|user| user.id == id)
+            .expect("exists");
         user.is_active = false;
         user.updated_at = Utc::now();
         let after_view = AdminUser::from(data.user_by_id(id).expect("exists"));
@@ -317,11 +329,12 @@ pub async fn set_apps(
         let before: Vec<Uuid> = data.app_ids_for_user(id);
         data.user_apps.retain(|grant| grant.user_id != id);
         let now = Utc::now();
-        data.user_apps.extend(app_ids.iter().map(|app_id| UserAppRow {
-            user_id: id,
-            app_id: *app_id,
-            created_at: now,
-        }));
+        data.user_apps
+            .extend(app_ids.iter().map(|app_id| UserAppRow {
+                user_id: id,
+                app_id: *app_id,
+                created_at: now,
+            }));
 
         data.bump_revision();
         let view = UserDetail {
@@ -344,19 +357,6 @@ pub async fn set_apps(
 
 /// Codes are intentionally not generated any more. The route stays so the admin portal's
 /// "issue code" button does not produce a network error.
-pub async fn reset_code(
-    Path(_id): Path<Uuid>,
-    body: Option<Json<serde_json::Value>>,
-) -> Json<IssuedCode> {
-    let _ = body;
-    Json(IssuedCode {
-        code: String::new(),
-        expires_at: Utc::now() + Duration::hours(72),
-        emailed: false,
-    })
-}
-
-#[derive(Debug)]
 struct CsvRow {
     line: usize,
     name: String,
@@ -439,7 +439,6 @@ pub async fn import(
             updated: 0,
             unchanged: 0,
             errors: Vec::new(),
-            onboarding: Vec::new(),
         };
         let mut seen: HashMap<String, usize> = HashMap::new();
 
@@ -468,7 +467,9 @@ pub async fn import(
                 report.errors.push(ImportErrorRow {
                     line: row.line,
                     email: Some(email),
-                    message: format!("Duplicate email in this file (first seen on line {first_line})."),
+                    message: format!(
+                        "Duplicate email in this file (first seen on line {first_line})."
+                    ),
                 });
                 continue;
             }
@@ -520,7 +521,11 @@ pub async fn import(
             match data.user_by_email(&email).cloned() {
                 Some(existing) => {
                     if existing.name != name || existing.department != department {
-                        let user = data.users.iter_mut().find(|user| user.id == existing.id).expect("exists");
+                        let user = data
+                            .users
+                            .iter_mut()
+                            .find(|user| user.id == existing.id)
+                            .expect("exists");
                         user.name = name;
                         user.department = department;
                         user.updated_at = Utc::now();
@@ -576,9 +581,11 @@ pub async fn import(
 fn add_memberships(data: &mut crate::store::Data, user_id: Uuid, group_ids: &[Uuid]) {
     let now = Utc::now();
     for group_id in group_ids {
-        if !data.group_members.iter().any(|member| {
-            member.group_id == *group_id && member.user_id == user_id
-        }) {
+        if !data
+            .group_members
+            .iter()
+            .any(|member| member.group_id == *group_id && member.user_id == user_id)
+        {
             data.group_members.push(crate::store::GroupMemberRow {
                 group_id: *group_id,
                 user_id,

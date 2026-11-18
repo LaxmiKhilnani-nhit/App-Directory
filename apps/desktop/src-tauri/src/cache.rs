@@ -123,11 +123,6 @@ pub fn load() -> Result<Option<StoredSnapshot>, String> {
 
 /// Wipes the cached data **and its metadata**, so a later login cannot resurrect a previous
 /// person's "last synced / revision" numbers on the sign-in screen.
-pub fn clear() {
-    let _ = fs::remove_file(config::cache_path());
-    let _ = fs::remove_file(config::config_path());
-    let _ = fs::remove_dir_all(config::icons_dir());
-}
 
 pub fn load_config() -> ClientConfig {
     fs::read(config::config_path())
@@ -170,7 +165,6 @@ mod tests {
                 user: SyncUser {
                     name: "Test User".to_string(),
                     department: None,
-                    must_change_password: false,
                 },
                 apps: Vec::new(),
             },
