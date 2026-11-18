@@ -40,6 +40,20 @@ pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
         }
     }
 
+    // A person belongs to one department by name; granting an app to the department grants it
+    // to everybody in it. Department names are managed centrally in departments.csv.
+    let granted_departments: HashSet<Uuid> = user
+        .department
+        .as_deref()
+        .map(|name| {
+            data.departments
+                .iter()
+                .filter(|department| department.name.eq_ignore_ascii_case(name.trim()))
+                .map(|department| department.id)
+                .collect()
+        })
+        .unwrap_or_default();
+
     let mut apps: Vec<crate::store::AppRow> = data
         .apps
         .iter()
@@ -52,6 +66,11 @@ pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
                 .iter()
                 .any(|grant| grant.app_id == app.id && grant.user_id == user_id)
             {
+                return true;
+            }
+            if data.app_departments.iter().any(|grant| {
+                grant.app_id == app.id && granted_departments.contains(&grant.department_id)
+            }) {
                 return true;
             }
             data.app_groups
@@ -71,5 +90,7 @@ pub fn apps_for_user(data: &Data, user_id: Uuid) -> Vec<crate::store::AppRow> {
 
 /// Whether the user may see one specific app. Used by the icon route.
 pub fn is_entitled(data: &Data, user_id: Uuid, app_id: Uuid) -> bool {
-    apps_for_user(data, user_id).iter().any(|app| app.id == app_id)
+    apps_for_user(data, user_id)
+        .iter()
+        .any(|app| app.id == app_id)
 }

@@ -7,6 +7,7 @@
  * Usage: ADMIN_TOKEN=<token> node scripts/export-to-csv.mjs
  */
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,6 +81,14 @@ for (const app of apps) {
   for (const groupId of app.groupIds ?? []) appGroups.push([app.id, groupId]);
   for (const userId of app.userIds ?? []) userApps.push([userId, app.id, now]);
 }
+
+// Departments are derived from the distinct department names already in users.csv.
+const departmentNames = [...new Set(users.map((user) => user.department).filter(Boolean))];
+const departments = departmentNames.map((name) => [
+  randomUUID(), name, now, now,
+]);
+write("departments.csv", ["id", "name", "createdAt", "updatedAt"], departments);
+write("app_departments.csv", ["appId", "departmentId"], []);
 
 write("group_members.csv", ["groupId", "userId", "createdAt"], groupMembers);
 write("app_groups.csv", ["appId", "groupId"], appGroups);

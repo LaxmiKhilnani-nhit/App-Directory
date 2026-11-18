@@ -2,7 +2,11 @@
 
 use std::{fs, path::PathBuf, sync::Arc};
 
-use axum::{body::Body, http::{HeaderMap, Request, StatusCode}, Router};
+use axum::{
+    body::Body,
+    http::{HeaderMap, Request, StatusCode},
+    Router,
+};
 use chrono::Utc;
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -11,7 +15,7 @@ use uuid::Uuid;
 use app_directory_api::build_router;
 use app_directory_api::config::Config;
 use app_directory_api::state::AppState;
-use app_directory_api::store::{AppRow, GroupRow, Store, UserRow};
+use app_directory_api::store::{AppRow, DepartmentRow, GroupRow, Store, UserRow};
 
 pub struct Harness {
     pub dir: PathBuf,
@@ -91,6 +95,37 @@ pub fn add_group(h: &Harness, name: &str, auto_department: Option<&str>) -> Uuid
     id
 }
 
+pub fn add_department(h: &Harness, name: &str) -> Uuid {
+    let now = Utc::now();
+    let id = Uuid::new_v4();
+    h.state
+        .store
+        .mutate(|data| {
+            data.departments.push(DepartmentRow {
+                id,
+                name: name.to_string(),
+                created_at: now,
+                updated_at: now,
+            });
+            Ok(())
+        })
+        .expect("add department");
+    id
+}
+
+pub fn grant_department(h: &Harness, department_id: Uuid, app_id: Uuid) {
+    h.state
+        .store
+        .mutate(|data| {
+            data.app_departments
+                .push(app_directory_api::store::AppDepartmentRow {
+                    department_id,
+                    app_id,
+                });
+            Ok(())
+        })
+        .expect("grant department");
+}
 pub fn add_app(h: &Harness, name: &str, sort_order: i32) -> Uuid {
     let now = Utc::now();
     let id = Uuid::new_v4();
@@ -139,11 +174,12 @@ pub fn add_member(h: &Harness, group_id: Uuid, user_id: Uuid) {
     h.state
         .store
         .mutate(|data| {
-            data.group_members.push(app_directory_api::store::GroupMemberRow {
-                group_id,
-                user_id,
-                created_at: Utc::now(),
-            });
+            data.group_members
+                .push(app_directory_api::store::GroupMemberRow {
+                    group_id,
+                    user_id,
+                    created_at: Utc::now(),
+                });
             Ok(())
         })
         .expect("add member");
@@ -153,10 +189,8 @@ pub fn grant_group(h: &Harness, group_id: Uuid, app_id: Uuid) {
     h.state
         .store
         .mutate(|data| {
-            data.app_groups.push(app_directory_api::store::AppGroupRow {
-                group_id,
-                app_id,
-            });
+            data.app_groups
+                .push(app_directory_api::store::AppGroupRow { group_id, app_id });
             Ok(())
         })
         .expect("grant group");
@@ -194,7 +228,11 @@ pub struct SendOptions<'a> {
     pub method: &'a str,
 }
 
-pub async fn call(h: &Harness, uri: &str, options: SendOptions<'_>) -> (StatusCode, HeaderMap, Value) {
+pub async fn call(
+    h: &Harness,
+    uri: &str,
+    options: SendOptions<'_>,
+) -> (StatusCode, HeaderMap, Value) {
     let mut builder = Request::builder()
         .method(options.method)
         .uri(uri)
@@ -244,7 +282,13 @@ pub async fn get(h: &Harness, uri: &str, identity: Option<&str>) -> (StatusCode,
     (status, body)
 }
 
-pub async fn json(h: &Harness, method: &str, uri: &str, identity: Option<&str>, body: Value) -> (StatusCode, Value) {
+pub async fn json(
+    h: &Harness,
+    method: &str,
+    uri: &str,
+    identity: Option<&str>,
+    body: Value,
+) -> (StatusCode, Value) {
     let (status, _, body) = call(
         h,
         uri,

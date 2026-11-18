@@ -6,6 +6,7 @@ import { RequireAuth, SuperAdminOnly } from "./components/RequireAuth";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Apps } from "./pages/Apps";
+import { Departments } from "./pages/Departments";
 import { Groups } from "./pages/Groups";
 import { Users } from "./pages/Users";
 import { Import } from "./pages/Import";
@@ -36,6 +37,7 @@ export function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/apps" element={<Apps />} />
+          <Route path="/departments" element={<Super><Departments /></Super>} />
           <Route path="/groups" element={<Super><Groups /></Super>} />
           <Route path="/users" element={<Super><Users /></Super>} />
           <Route path="/import" element={<Super><Import /></Super>} />

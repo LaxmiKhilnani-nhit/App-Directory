@@ -55,6 +55,7 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
 
   const apps = useAsync(() => adminApi.apps(), []);
   const groups = useAsync(() => adminApi.groups(), []);
+  const departments = useAsync(() => adminApi.departments(), []);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -303,14 +304,17 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
             </div>
 
             <div className="admin-form-grid">
-              <TextField
+              <SelectField
                 label="Department"
                 value={department}
                 onChange={(event) => setDepartment(event.target.value)}
-                maxLength={120}
-                placeholder="Finance"
-                hint="Automatic groups match on this value."
-              />
+                hint="Apps granted to this department appear for the user automatically."
+              >
+                <option value="">No department</option>
+                {(departments.data ?? []).map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </SelectField>
 
               <SelectField
                 label="Role"

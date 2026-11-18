@@ -5,12 +5,7 @@ mod support;
 use support::*;
 
 async fn app_names(h: &Harness, local: &str) -> Vec<String> {
-    let (status, payload) = get(
-        h,
-        "/api/v1/client/sync",
-        Some(&format!("ad\\{local}")),
-    )
-    .await;
+    let (status, payload) = get(h, "/api/v1/client/sync", Some(&format!("ad\\{local}"))).await;
     assert_eq!(status, axum::http::StatusCode::OK, "{payload}");
     payload["apps"]
         .as_array()
@@ -31,6 +26,24 @@ async fn direct_grant_only() {
     assert_eq!(app_names(&h, "direct").await, vec!["Payroll"]);
     assert!(!app_names(&h, "direct").await.contains(&"Crm".to_string()));
     assert!(!other.is_nil());
+}
+
+#[tokio::test]
+async fn department_grant_reaches_everyone_in_it() {
+    let h = setup();
+    let finance = add_department(&h, "Finance");
+    let roads = add_department(&h, "Roads");
+    let in_finance = add_user(&h, "financeuser", Some("Finance"), true);
+    let in_roads = add_user(&h, "roadsuser", Some("Roads"), true);
+    let payroll = add_app(&h, "Payroll", 10);
+    let crm = add_app(&h, "Crm", 20);
+
+    grant_department(&h, finance, payroll);
+    grant_department(&h, roads, crm);
+
+    assert_eq!(app_names(&h, "financeuser").await, vec!["Payroll"]);
+    assert_eq!(app_names(&h, "roadsuser").await, vec!["Crm"]);
+    assert!(!in_finance.is_nil() && !in_roads.is_nil());
 }
 
 #[tokio::test]
@@ -89,10 +102,7 @@ async fn union_deduplicates_and_orders_by_sort_then_name() {
         grant_group(&h, app_directory_api::store::ALL_USERS_GROUP_ID, app);
     }
 
-    assert_eq!(
-        app_names(&h, "both").await,
-        vec!["Alpha", "Beta", "Zebra"]
-    );
+    assert_eq!(app_names(&h, "both").await, vec!["Alpha", "Beta", "Zebra"]);
 }
 
 #[tokio::test]

@@ -108,8 +108,18 @@ export interface AdminApp {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  departmentIds: string[];
   groupIds: string[];
   userIds: string[];
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  userCount: number;
+  appCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AdminGroup {

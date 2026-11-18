@@ -118,6 +118,7 @@ pub struct AdminApp {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub department_ids: Vec<Uuid>,
     pub group_ids: Vec<Uuid>,
     pub user_ids: Vec<Uuid>,
 }
@@ -141,8 +142,41 @@ impl AdminApp {
             created_at: app.created_at,
             updated_at: app.updated_at,
             deleted_at: app.deleted_at,
+            department_ids: data.department_ids_for_app(app.id),
             group_ids: data.group_ids_for_app(app.id),
             user_ids: data.user_ids_for_app(app.id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Department {
+    pub id: Uuid,
+    pub name: String,
+    pub user_count: i64,
+    pub app_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Department {
+    pub fn from_row(row: &crate::store::DepartmentRow, data: &Data) -> Self {
+        Self {
+            id: row.id,
+            name: row.name.clone(),
+            user_count: data
+                .users
+                .iter()
+                .filter(|user| user.department.as_deref() == Some(row.name.as_str()))
+                .count() as i64,
+            app_count: data
+                .app_departments
+                .iter()
+                .filter(|grant| grant.department_id == row.id)
+                .count() as i64,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         }
     }
 }

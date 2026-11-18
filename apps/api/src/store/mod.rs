@@ -25,10 +25,13 @@ use uuid::Uuid;
 use crate::error::ApiError;
 
 pub use models::{
-    AppGroupRow, AppRow, AuditRow, Data, GroupMemberRow, GroupRow, SettingRow, UserAppRow, UserRow,
+    AppDepartmentRow, AppGroupRow, AppRow, AuditRow, Data, DepartmentRow, GroupMemberRow, GroupRow,
+    SettingRow, UserAppRow, UserRow,
 };
 
 const USERS: &str = "users.csv";
+const DEPARTMENTS: &str = "departments.csv";
+const APP_DEPARTMENTS: &str = "app_departments.csv";
 const GROUPS: &str = "groups.csv";
 const GROUP_MEMBERS: &str = "group_members.csv";
 const APPS: &str = "apps.csv";
@@ -38,8 +41,10 @@ const SETTINGS: &str = "settings.csv";
 const AUDIT: &str = "audit.csv";
 const REVISION: &str = "revision.csv";
 
-const FILES: [&str; 9] = [
+const FILES: [&str; 11] = [
     USERS,
+    DEPARTMENTS,
+    APP_DEPARTMENTS,
     GROUPS,
     GROUP_MEMBERS,
     APPS,
@@ -223,6 +228,34 @@ impl Store {
         }
         csv::write_rows(&dir.join(USERS), header_for(USERS), &users)?;
 
+        let mut departments = Vec::new();
+        for row in &data.departments {
+            departments.push(vec![
+                models::uuid_str(row.id),
+                row.name.clone(),
+                models::dt_str(row.created_at),
+                models::dt_str(row.updated_at),
+            ]);
+        }
+        csv::write_rows(
+            &dir.join(DEPARTMENTS),
+            header_for(DEPARTMENTS),
+            &departments,
+        )?;
+
+        let mut app_departments = Vec::new();
+        for row in &data.app_departments {
+            app_departments.push(vec![
+                models::uuid_str(row.app_id),
+                models::uuid_str(row.department_id),
+            ]);
+        }
+        csv::write_rows(
+            &dir.join(APP_DEPARTMENTS),
+            header_for(APP_DEPARTMENTS),
+            &app_departments,
+        )?;
+
         let mut groups = Vec::new();
         for row in &data.groups {
             groups.push(vec![
@@ -354,6 +387,32 @@ impl Store {
                 last_login_at: models::dt(&field(8)),
                 created_at: models::dt(&field(9)).unwrap_or_else(Utc::now),
                 updated_at: models::dt(&field(10)).unwrap_or_else(Utc::now),
+            });
+        }
+
+        for row in csv::read_rows(&dir.join(DEPARTMENTS)).unwrap_or_default() {
+            let Some(id) = models::opt_uuid(row.first().map(String::as_str).unwrap_or("")) else {
+                continue;
+            };
+            let field = |index: usize| row.get(index).cloned().unwrap_or_default();
+            data.departments.push(DepartmentRow {
+                id,
+                name: field(1),
+                created_at: models::dt(&field(2)).unwrap_or_else(Utc::now),
+                updated_at: models::dt(&field(3)).unwrap_or_else(Utc::now),
+            });
+        }
+
+        for row in csv::read_rows(&dir.join(APP_DEPARTMENTS)).unwrap_or_default() {
+            let (Some(app_id), Some(department_id)) = (
+                models::opt_uuid(row.first().map(String::as_str).unwrap_or("")),
+                models::opt_uuid(row.get(1).map(String::as_str).unwrap_or("")),
+            ) else {
+                continue;
+            };
+            data.app_departments.push(AppDepartmentRow {
+                app_id,
+                department_id,
             });
         }
 
@@ -510,6 +569,8 @@ impl Store {
 fn header_for(name: &str) -> &'static str {
     match name {
         USERS => "id,email,name,department,role,adminScope,isActive,mustChangePassword,lastLoginAt,createdAt,updatedAt",
+        DEPARTMENTS => "id,name,createdAt,updatedAt",
+        APP_DEPARTMENTS => "appId,departmentId",
         GROUPS => "id,name,description,autoDepartment,isAllUsers,createdAt,updatedAt",
         GROUP_MEMBERS => "groupId,userId,createdAt",
         APPS => "id,name,url,description,category,color,sortOrder,isEnabled,offlineVisible,iconSource,iconMime,iconFetchedAt,iconEtag,createdAt,updatedAt,deletedAt",

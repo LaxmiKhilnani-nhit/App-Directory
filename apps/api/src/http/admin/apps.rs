@@ -18,6 +18,13 @@ use crate::state::AppState;
 use crate::store::{AppGroupRow, AppRow, UserAppRow};
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DepartmentGrants {
+    #[serde(default)]
+    pub department_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewApp {
     pub name: String,
@@ -83,7 +90,11 @@ pub async fn list(
     TrustedUser(_actor): TrustedUser,
 ) -> ApiResult<Json<Vec<AdminApp>>> {
     let data = state.store.read();
-    let mut apps: Vec<&AppRow> = data.apps.iter().filter(|app| app.deleted_at.is_none()).collect();
+    let mut apps: Vec<&AppRow> = data
+        .apps
+        .iter()
+        .filter(|app| app.deleted_at.is_none())
+        .collect();
     apps.sort_by(|left, right| {
         left.sort_order
             .cmp(&right.sort_order)
@@ -210,7 +221,11 @@ pub async fn update(
 
         let before_view = AdminApp::from_row(&before, data);
         {
-            let app = data.apps.iter_mut().find(|app| app.id == id).expect("exists");
+            let app = data
+                .apps
+                .iter_mut()
+                .find(|app| app.id == id)
+                .expect("exists");
             app.name = name;
             app.url = url;
             app.description = description;
@@ -248,7 +263,11 @@ pub async fn delete(
             .ok_or_else(|| ApiError::not_found("app_not_found", "That app no longer exists."))?
             .clone();
         let now = Utc::now();
-        let app = data.apps.iter_mut().find(|app| app.id == id).expect("exists");
+        let app = data
+            .apps
+            .iter_mut()
+            .find(|app| app.id == id)
+            .expect("exists");
         app.deleted_at = Some(now);
         app.is_enabled = false;
         app.updated_at = now;
@@ -268,6 +287,59 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn set_departments(
+    State(state): State<AppState>,
+    TrustedUser(actor): TrustedUser,
+    Path(id): Path<Uuid>,
+    body: Result<Json<DepartmentGrants>, JsonRejection>,
+) -> ApiResult<Json<AdminApp>> {
+    let request = json_body(body)?;
+    let department_ids = dedupe(request.department_ids);
+
+    state.store.mutate(|data| {
+        if data.live_app_by_id(id).is_none() {
+            return Err(ApiError::not_found(
+                "app_not_found",
+                "That app no longer exists.",
+            ));
+        }
+        if !department_ids
+            .iter()
+            .all(|department_id| data.department_by_id(*department_id).is_some())
+        {
+            return Err(ApiError::bad_request(
+                "unknown_department",
+                "One of those departments no longer exists.",
+            ));
+        }
+
+        let before = data.department_ids_for_app(id);
+        data.app_departments.retain(|grant| grant.app_id != id);
+        data.app_departments
+            .extend(
+                department_ids
+                    .iter()
+                    .map(|department_id| crate::store::AppDepartmentRow {
+                        app_id: id,
+                        department_id: *department_id,
+                    }),
+            );
+
+        data.bump_revision();
+        let view = AdminApp::from_row(data.live_app_by_id(id).expect("exists"), data);
+        data.audit(
+            Some(actor.id),
+            Some(actor.email.clone()),
+            "app.departments",
+            "app",
+            Some(id),
+            Some(serde_json::json!({ "departmentIds": before })),
+            Some(serde_json::json!({ "departmentIds": department_ids })),
+        );
+        Ok(Json(view))
+    })
+}
+
 pub async fn set_groups(
     State(state): State<AppState>,
     TrustedUser(actor): TrustedUser,
@@ -279,18 +351,28 @@ pub async fn set_groups(
 
     state.store.mutate(|data| {
         if data.live_app_by_id(id).is_none() {
-            return Err(ApiError::not_found("app_not_found", "That app no longer exists."));
+            return Err(ApiError::not_found(
+                "app_not_found",
+                "That app no longer exists.",
+            ));
         }
-        if !group_ids.iter().all(|group_id| data.group_by_id(*group_id).is_some()) {
-            return Err(ApiError::bad_request("unknown_group", "One of those groups no longer exists."));
+        if !group_ids
+            .iter()
+            .all(|group_id| data.group_by_id(*group_id).is_some())
+        {
+            return Err(ApiError::bad_request(
+                "unknown_group",
+                "One of those groups no longer exists.",
+            ));
         }
 
         let before = data.group_ids_for_app(id);
         data.app_groups.retain(|grant| grant.app_id != id);
-        data.app_groups.extend(group_ids.iter().map(|group_id| AppGroupRow {
-            app_id: id,
-            group_id: *group_id,
-        }));
+        data.app_groups
+            .extend(group_ids.iter().map(|group_id| AppGroupRow {
+                app_id: id,
+                group_id: *group_id,
+            }));
 
         data.bump_revision();
         let view = AdminApp::from_row(data.live_app_by_id(id).expect("exists"), data);
@@ -318,20 +400,30 @@ pub async fn set_users(
 
     state.store.mutate(|data| {
         if data.live_app_by_id(id).is_none() {
-            return Err(ApiError::not_found("app_not_found", "That app no longer exists."));
+            return Err(ApiError::not_found(
+                "app_not_found",
+                "That app no longer exists.",
+            ));
         }
-        if !user_ids.iter().all(|user_id| data.user_by_id(*user_id).is_some()) {
-            return Err(ApiError::bad_request("unknown_user", "One of those users no longer exists."));
+        if !user_ids
+            .iter()
+            .all(|user_id| data.user_by_id(*user_id).is_some())
+        {
+            return Err(ApiError::bad_request(
+                "unknown_user",
+                "One of those users no longer exists.",
+            ));
         }
 
         let before = data.user_ids_for_app(id);
         data.user_apps.retain(|grant| grant.app_id != id);
         let now = Utc::now();
-        data.user_apps.extend(user_ids.iter().map(|user_id| UserAppRow {
-            user_id: *user_id,
-            app_id: id,
-            created_at: now,
-        }));
+        data.user_apps
+            .extend(user_ids.iter().map(|user_id| UserAppRow {
+                user_id: *user_id,
+                app_id: id,
+                created_at: now,
+            }));
 
         data.bump_revision();
         let view = AdminApp::from_row(data.live_app_by_id(id).expect("exists"), data);
@@ -409,7 +501,10 @@ fn store_icon(
     source: &str,
 ) -> ApiResult<Json<AdminApp>> {
     if bytes.is_empty() {
-        return Err(ApiError::bad_request("invalid_icon", "The icon file is empty."));
+        return Err(ApiError::bad_request(
+            "invalid_icon",
+            "The icon file is empty.",
+        ));
     }
     if bytes.len() > icon::MAX_ICON_BYTES {
         return Err(ApiError::bad_request(
@@ -423,11 +518,18 @@ fn store_icon(
 
     state.store.mutate(|data| {
         if data.live_app_by_id(id).is_none() {
-            return Err(ApiError::not_found("app_not_found", "That app no longer exists."));
+            return Err(ApiError::not_found(
+                "app_not_found",
+                "That app no longer exists.",
+            ));
         }
         let before = AdminApp::from_row(data.live_app_by_id(id).expect("exists"), data);
         {
-            let app = data.apps.iter_mut().find(|app| app.id == id).expect("exists");
+            let app = data
+                .apps
+                .iter_mut()
+                .find(|app| app.id == id)
+                .expect("exists");
             app.icon_mime = Some(mime.to_string());
             app.icon_source = source.to_string();
             app.icon_fetched_at = Some(Utc::now());

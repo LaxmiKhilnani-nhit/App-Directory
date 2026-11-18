@@ -103,6 +103,20 @@ pub struct GroupMemberRow {
 }
 
 #[derive(Debug, Clone)]
+pub struct DepartmentRow {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppDepartmentRow {
+    pub app_id: Uuid,
+    pub department_id: Uuid,
+}
+
+#[derive(Debug, Clone)]
 pub struct AppGroupRow {
     pub app_id: Uuid,
     pub group_id: Uuid,
@@ -163,6 +177,8 @@ pub struct AuditRow {
 #[derive(Debug, Default)]
 pub struct Data {
     pub users: Vec<UserRow>,
+    pub departments: Vec<DepartmentRow>,
+    pub app_departments: Vec<AppDepartmentRow>,
     pub groups: Vec<GroupRow>,
     pub group_members: Vec<GroupMemberRow>,
     pub apps: Vec<AppRow>,
@@ -187,7 +203,11 @@ impl Data {
         match self.setting(key) {
             Some(Value::Number(number)) => number.as_i64().unwrap_or(default),
             Some(Value::Bool(flag)) => {
-                if *flag { 1 } else { 0 }
+                if *flag {
+                    1
+                } else {
+                    0
+                }
             }
             Some(Value::String(text)) => text.trim().parse().unwrap_or(default),
             _ => default,
@@ -213,6 +233,19 @@ impl Data {
             .find(|user| user.email.to_lowercase() == email)
     }
 
+    pub fn department_by_id(&self, id: Uuid) -> Option<&DepartmentRow> {
+        self.departments
+            .iter()
+            .find(|department| department.id == id)
+    }
+
+    pub fn department_ids_for_app(&self, app_id: Uuid) -> Vec<Uuid> {
+        self.app_departments
+            .iter()
+            .filter(|grant| grant.app_id == app_id)
+            .map(|grant| grant.department_id)
+            .collect()
+    }
     pub fn group_by_id(&self, id: Uuid) -> Option<&GroupRow> {
         self.groups.iter().find(|group| group.id == id)
     }

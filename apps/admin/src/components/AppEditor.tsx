@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import type { AdminApp, AdminGroup, AdminUser, AppTile } from "@app-directory/types";
+import type { AdminApp, AdminGroup, AdminUser, AppTile, Department } from "@app-directory/types";
 import { adminApi, type AppInput } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../auth";
@@ -36,6 +36,9 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
   const [isEnabled, setIsEnabled] = useState(app?.isEnabled ?? true);
   const [offlineVisible, setOfflineVisible] = useState(app?.offlineVisible ?? true);
 
+  const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(
+    () => new Set(app?.departmentIds ?? []),
+  );
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(
     () => new Set(app?.groupIds ?? []),
   );
@@ -50,6 +53,7 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const departments = useAsync(() => adminApi.departments(), []);
   const users = useAsync(
     () => (isSuper ? adminApi.users({ limit: 500 }) : Promise.resolve(null)),
     [isSuper],
@@ -62,6 +66,7 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
 
   function resetAccessState(updated: AdminApp) {
     setCurrent(updated);
+    setSelectedDepartments(new Set(updated.departmentIds));
     setSelectedGroups(new Set(updated.groupIds));
     setSelectedUsers(new Set(updated.userIds));
     onChanged(updated);
@@ -133,6 +138,21 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
     }
   }
 
+  async function saveDepartments() {
+    if (!current) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await adminApi.setAppDepartments(current.id, [...selectedDepartments]);
+      resetAccessState(updated);
+      setNotice("Department access saved.");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function saveGroups() {
     if (!current) return;
     setBusy(true);
@@ -391,10 +411,49 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
         {tab === "access" && current ? (
           <div className="admin-form-stack">
             <div className="admin-stack-sm">
+              <h3 className="admin-section-title">Departments with access</h3>
+              <p className="admin-inline-hint">
+                Everyone assigned to a selected department sees this tile. Changes apply on the
+                next client sync.
+              </p>
+              <div className="admin-checklist">
+                {!departments.data || departments.data.length === 0 ? (
+                  <div className="admin-empty-inline">
+                    No departments yet — add them on the Departments screen.
+                  </div>
+                ) : (
+                  departments.data.map((department: Department) => (
+                    <CheckboxField
+                      key={department.id}
+                      label={department.name}
+                      hint={`${department.userCount} people · ${department.appCount} apps`}
+                      checked={selectedDepartments.has(department.id)}
+                      onChange={(checked) =>
+                        setSelectedDepartments((previous) => {
+                          const next = new Set(previous);
+                          if (checked) next.add(department.id);
+                          else next.delete(department.id);
+                          return next;
+                        })
+                      }
+                    />
+                  ))
+                )}
+              </div>
+              <div className="admin-actions">
+                <Button variant="primary" size="sm" onClick={saveDepartments} disabled={busy}>
+                  Save department access
+                </Button>
+              </div>
+            </div>
+
+            <hr className="admin-divider" />
+
+            <div className="admin-stack-sm">
               <h3 className="admin-section-title">Groups with access</h3>
               <p className="admin-inline-hint">
-                Everyone in a selected group sees this tile: explicit members, matching departments,
-                and the built-in All Users group.
+                Everyone in a selected group sees this tile: explicit members and the built-in All
+                Users group.
               </p>
               <div className="admin-checklist">
                 {groups.length === 0 ? (

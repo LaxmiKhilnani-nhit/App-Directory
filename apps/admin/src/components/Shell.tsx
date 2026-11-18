@@ -11,6 +11,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/apps", label: "Apps" },
+  { to: "/departments", label: "Departments", superOnly: true },
   { to: "/groups", label: "Groups", superOnly: true },
   { to: "/users", label: "Users", superOnly: true },
   { to: "/import", label: "CSV import", superOnly: true },

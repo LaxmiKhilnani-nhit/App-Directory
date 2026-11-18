@@ -4,6 +4,7 @@ import type {
   AdminMe,
   AdminUser,
   AuditPage,
+  Department,
   GroupDetail,
   ImportReport,
   Setting,
@@ -95,6 +96,11 @@ export const adminApi = {
       body: JSON.stringify(patch),
     }),
   deleteApp: (id: string) => request<void>(`/api/v1/admin/apps/${id}`, { method: "DELETE" }),
+  setAppDepartments: (id: string, departmentIds: string[]) =>
+    request<AdminApp>(`/api/v1/admin/apps/${id}/departments`, {
+      method: "PUT",
+      body: JSON.stringify({ departmentIds }),
+    }),
   setAppGroups: (id: string, groupIds: string[]) =>
     request<AdminApp>(`/api/v1/admin/apps/${id}/groups`, {
       method: "PUT",
@@ -113,6 +119,20 @@ export const adminApi = {
       file,
       file.type || "application/octet-stream",
     ),
+
+  departments: () => request<Department[]>("/api/v1/admin/departments"),
+  createDepartment: (name: string) =>
+    request<Department>("/api/v1/admin/departments", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  updateDepartment: (id: string, name: string) =>
+    request<Department>(`/api/v1/admin/departments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  deleteDepartment: (id: string) =>
+    request<void>(`/api/v1/admin/departments/${id}`, { method: "DELETE" }),
 
   groups: () => request<AdminGroup[]>("/api/v1/admin/groups"),
   group: (id: string) => request<GroupDetail>(`/api/v1/admin/groups/${id}`),

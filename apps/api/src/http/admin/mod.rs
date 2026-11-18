@@ -1,5 +1,6 @@
 pub mod apps;
 pub mod audit;
+pub mod departments;
 pub mod groups;
 pub mod settings;
 pub mod stats;
@@ -20,10 +21,22 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/me", get(me))
         .route("/api/v1/admin/stats", get(stats::get))
+        .route(
+            "/api/v1/admin/departments",
+            get(departments::list).post(departments::create),
+        )
+        .route(
+            "/api/v1/admin/departments/{id}",
+            axum::routing::patch(departments::update).delete(departments::delete),
+        )
         .route("/api/v1/admin/apps", get(apps::list).post(apps::create))
         .route(
             "/api/v1/admin/apps/{id}",
             get(apps::get).patch(apps::update).delete(apps::delete),
+        )
+        .route(
+            "/api/v1/admin/apps/{id}/departments",
+            put(apps::set_departments),
         )
         .route("/api/v1/admin/apps/{id}/icon", post(apps::upload_icon))
         .route(

@@ -120,8 +120,10 @@ edited by hand on the next request.
 
 | File | Purpose |
 |---|---|
-| `users.csv` | Accounts, name, email, department, role, active flag |
-| `groups.csv` | Manual groups, auto-by-department groups, built-in All Users |
+| `users.csv` | Accounts, name, email, department (a department name), role, active flag |
+| `departments.csv` | The departments people can belong to |
+| `app_departments.csv` | App granted to a department |
+| `groups.csv` | Manual user groups and the built-in All Users |
 | `group_members.csv` | Explicit group membership |
 | `apps.csv` | Tiles: name, URL, category, order, enabled/visibility flags, icon metadata |
 | `app_groups.csv` / `user_apps.csv` | Group and direct-user grants |
@@ -131,8 +133,11 @@ edited by hand on the next request.
 
 The entitlement rule lives in `apps/api/src/domain/entitlements.rs`:
 
-> direct grant **union** grants via any group the user belongs to (explicit membership,
-> department match, or All Users), for active users and enabled, non-deleted apps.
+> direct person grant **union** department grant (the user's department) **union** group
+> grant (explicit membership or All Users), for active users and enabled, non-deleted apps.
+
+Departments are managed on their own screen; the user editor assigns one from a list. Renaming
+a department keeps its people and app grants.
 
 To move data out of the old PostgreSQL stack, run `scripts/export-to-csv.mjs` while the old API
 is still running, then switch to the CSV stack.
@@ -159,8 +164,9 @@ their apps. This was accepted deliberately to keep the client sign-in-free. Do n
 | Sign in | `/admin/login` | admin-only entry point |
 | Dashboard | `/admin/dashboard` | counts and recent audit entries |
 | Applications | `/admin/apps` | table, create/edit drawer, icon upload/refetch, grants |
-| Groups | `/admin/groups` | manual and auto-by-department groups; All Users is built in |
-| Users & access | `/admin/users` | profile, role, direct grants, deactivate |
+| Departments | `/admin/departments` | department list; rename or delete (people and app grants follow) |
+| Groups | `/admin/groups` | manual user groups; All Users is built in |
+| Users & access | `/admin/users` | profile, department, role, direct grants, deactivate |
 | CSV import | `/admin/import` | paste CSV, validate, per-row errors, commit |
 | Settings | `/admin/settings` | app name, identity mapping, sync/offline, announcement, client update |
 | Audit log | `/admin/audit` | filters and expandable before/after JSON |
