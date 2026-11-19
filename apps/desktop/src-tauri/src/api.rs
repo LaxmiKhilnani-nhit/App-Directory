@@ -3,10 +3,11 @@
 //! There are no passwords, tokens or sessions: every request carries the current Windows
 //! identity in `X-Windows-Identity`, and the server resolves entitlements from its CSV store.
 
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 
 use crate::identity;
@@ -107,23 +108,36 @@ struct ErrorBody {
 pub struct ApiClient {
     http: reqwest::Client,
     base: String,
+    /// Changed when the user confirms their email; shared with the Tauri commands.
+    identity: Arc<RwLock<String>>,
 }
 
 impl ApiClient {
     pub fn new(base: String) -> Self {
-        let mut headers = HeaderMap::new();
-        if let Ok(value) = HeaderValue::from_str(&identity::windows_identity()) {
-            headers.insert("x-windows-identity", value);
-        }
-
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(20))
             .user_agent(format!("AppDirectory/{}", env!("CARGO_PKG_VERSION")))
-            .default_headers(headers)
             .build()
             .expect("HTTP client");
 
-        Self { http, base }
+        Self {
+            http,
+            base,
+            identity: Arc::new(RwLock::new(identity::current())),
+        }
+    }
+
+    pub fn identity(&self) -> String {
+        self.identity
+            .read()
+            .map(|value| value.clone())
+            .unwrap_or_else(|_| identity::current())
+    }
+
+    pub fn set_identity(&self, email: &str) {
+        if let Ok(mut value) = self.identity.write() {
+            *value = email.trim().to_string();
+        }
     }
 
     fn url(&self, path: &str) -> String {
@@ -139,6 +153,13 @@ impl ApiClient {
             Some(limit) => request.timeout(limit),
             None => request,
         };
+
+        let value = self.identity();
+        let request = match HeaderValue::from_str(&value) {
+            Ok(header) => request.header("x-windows-identity", header),
+            Err(_) => request,
+        };
+
         request.send().await.map_err(CommandError::network)
     }
 

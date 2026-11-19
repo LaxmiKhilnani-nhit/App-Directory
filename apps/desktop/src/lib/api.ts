@@ -28,6 +28,12 @@ export interface IdentityState {
   knownUser: boolean;
 }
 
+export interface IdentityStatus {
+  configured: boolean;
+  email: string;
+  suggestion: string;
+}
+
 export interface SnapshotUser {
   name: string;
   department: string | null;
@@ -74,6 +80,18 @@ export function toCommandError(error: unknown): CommandError {
 
 export async function coreInfo(): Promise<CoreInfo> {
   return invoke<CoreInfo>("core_info");
+}
+
+export async function identityStatus(): Promise<IdentityStatus> {
+  return invoke<IdentityStatus>("identity_status");
+}
+
+export async function setIdentity(email: string): Promise<void> {
+  return invoke<void>("set_identity", { email });
+}
+
+export async function clearIdentity(): Promise<void> {
+  return invoke<void>("clear_identity");
 }
 
 export async function identityState(): Promise<IdentityState> {

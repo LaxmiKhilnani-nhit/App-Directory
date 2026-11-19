@@ -198,12 +198,14 @@ export function Footer({
   shown,
   total,
   onRefresh,
+  onChangeEmail,
 }: {
   refreshing: boolean;
   lastSyncedAt: string;
   shown: number;
   total: number;
   onRefresh: () => void;
+  onChangeEmail: () => void;
 }) {
   const count = shown === total
     ? `${total} app${total === 1 ? "" : "s"}`
@@ -219,9 +221,14 @@ export function Footer({
         )}
       </span>
       <span>{count}</span>
-      <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing}>
-        Refresh now
-      </Button>
+      <div className="desktop-footer__actions">
+        <Button variant="ghost" size="sm" onClick={onChangeEmail}>
+          Change email
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing}>
+          Refresh now
+        </Button>
+      </div>
     </footer>
   );
 }

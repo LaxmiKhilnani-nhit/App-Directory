@@ -98,11 +98,7 @@ fn previous_etags() -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
-async fn refresh_icons(
-    api: &ApiClient,
-    apps: &[SyncApp],
-    prior: &HashMap<String, String>,
-) {
+async fn refresh_icons(api: &ApiClient, apps: &[SyncApp], prior: &HashMap<String, String>) {
     for app in apps {
         let (Some(path), Some(etag)) = (app.icon_url.as_deref(), app.icon_etag.as_deref()) else {
             continue;
@@ -114,10 +110,7 @@ async fn refresh_icons(
             continue;
         }
 
-        match api
-            .icon(path, prior.get(&app.id).map(String::as_str))
-            .await
-        {
+        match api.icon(path, prior.get(&app.id).map(String::as_str)).await {
             Ok(Some(bytes)) => {
                 if let Err(error) = icons::save(&file, &bytes) {
                     tracing::warn!("icon save failed: {error}");

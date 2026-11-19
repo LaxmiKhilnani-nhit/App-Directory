@@ -148,11 +148,17 @@ is still running, then switch to the CSV stack.
 
 ## Authentication
 
-There is no password, session or onboarding code in the client. The desktop client runs
-`whoami` (`ad\laxmikhilnani.os`), sends it as `X-Windows-Identity`, and the server maps the local
-part to `<user>@<mail_domain>` (default `nhit.co.in`, editable in Settings). If the user exists
-and is active in `users.csv`, `/client/sync` returns their apps; otherwise the client shows a
-"contact IT" screen.
+There is no password, session or onboarding code in the client. On first launch it asks the
+user to confirm their work email (pre-filled from the Windows account, since `whoami` is not
+always the person's email name) and caches it in
+`%LOCALAPPDATA%\AppDirectory\identity.txt`. Every later launch sends that email as
+`X-Windows-Identity` with no prompt. **Change email** in the directory footer clears the cache
+and asks again. The address is checked against the server before it is saved, so a typo is not
+cached.
+
+The server also accepts a `DOMAIN\user` identity and normalises it to `<user>@<mail_domain>`
+(default `nhit.co.in`, editable in Settings). If the user exists and is active in `users.csv`,
+`/client/sync` returns their apps; otherwise the client shows a "contact IT" screen.
 
 The admin portal keeps its sign-in page, but it is for administrators only: `super_admin` and
 `app_admin` accounts can log in, while a plain `user` account gets a 403 from `login` and every

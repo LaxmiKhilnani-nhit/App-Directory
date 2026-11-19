@@ -16,6 +16,8 @@ use serde::Serialize;
 use tauri::{Manager, State};
 
 use api::{ApiClient, CommandError};
+use config as client_config;
+use identity as user_identity;
 
 /// Shared per-process state. The manual refresh budget stays at one per minute.
 struct Client {
@@ -31,6 +33,14 @@ struct CoreInfo {
     api_base_url: String,
     running_in_tauri: bool,
     identity: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdentityStatus {
+    configured: bool,
+    email: String,
+    suggestion: String,
 }
 
 #[derive(Serialize)]
@@ -54,8 +64,52 @@ fn core_info() -> CoreInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         api_base_url: config::api_base_url(),
         running_in_tauri: true,
-        identity: identity::windows_identity(),
+        identity: user_identity::current(),
     }
+}
+
+#[tauri::command]
+fn identity_status(client: State<'_, Client>) -> IdentityStatus {
+    let configured = client_config::cached_identity().is_some();
+    IdentityStatus {
+        configured,
+        email: client.api.identity(),
+        suggestion: user_identity::suggested_email(),
+    }
+}
+
+/// Validates the email against the server before caching it on this device.
+#[tauri::command]
+async fn set_identity(client: State<'_, Client>, email: String) -> Result<(), CommandError> {
+    let email = email.trim().to_lowercase();
+    if email.len() < 3 || !email.contains('@') || email.contains(char::is_whitespace) {
+        return Err(CommandError::new(
+            "invalid_email",
+            "Enter a valid work email address.",
+        ));
+    }
+
+    let previous = client.api.identity();
+    client.api.set_identity(&email);
+
+    match client.api.session_user(Duration::from_secs(6)).await {
+        Ok(_) => {
+            client_config::save_identity(&email)
+                .map_err(|error| CommandError::new("identity_error", error))?;
+            Ok(())
+        }
+        Err(error) => {
+            client.api.set_identity(&previous);
+            Err(error)
+        }
+    }
+}
+
+/// Clears the cached email so the next launch asks again (shared PC or a typo).
+#[tauri::command]
+fn clear_identity(client: State<'_, Client>) {
+    client_config::clear_identity();
+    client.api.set_identity(&user_identity::current());
 }
 
 /// Boot probe: derive the Windows identity, check the cached snapshot, and try the server.
@@ -153,8 +207,9 @@ fn open_app(url: String) -> Result<(), CommandError> {
         .map_err(|_| CommandError::new("invalid_url", "That app has an invalid address."))?;
 
     match parsed.scheme() {
-        "http" | "https" => open::that(parsed.as_str())
-            .map_err(|error| CommandError::new("open_failed", format!("Could not open the link: {error}"))),
+        "http" | "https" => open::that(parsed.as_str()).map_err(|error| {
+            CommandError::new("open_failed", format!("Could not open the link: {error}"))
+        }),
         _ => Err(CommandError::new(
             "invalid_url",
             "Only web links can be opened from the directory.",
@@ -197,6 +252,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             core_info,
+            identity_status,
+            set_identity,
+            clear_identity,
             identity_state,
             sync_snapshot,
             cached_snapshot,

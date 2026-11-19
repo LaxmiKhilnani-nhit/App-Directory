@@ -4,10 +4,13 @@ import {
   type CommandError,
   type CoreInfo,
   type IdentityState,
+  type IdentityStatus,
   type Snapshot,
   cachedSnapshot,
+  clearIdentity,
   coreInfo,
   identityState,
+  identityStatus,
   isTauri,
   syncSnapshot,
   toCommandError,
@@ -15,19 +18,20 @@ import {
 import { demoSnapshot } from "./lib/demo";
 import { relativeTime } from "./lib/time";
 import { Directory } from "./pages/Directory";
+import { IdentityPrompt } from "./components/IdentityPrompt";
 
 /**
- * Boot flow: the Windows identity is trusted by the server, so there is no sign-in.
- * Live sync first, cached snapshot when the server is down, and a clear error screen when
- * neither is available.
+ * Boot flow: confirm the work email once, cache it on the device, then every launch goes
+ * straight to the directory. Live sync first, cached snapshot when the server is down.
  */
-type Phase = "booting" | "directory" | "error";
+type Phase = "booting" | "identity" | "directory" | "error";
 
 export function App() {
   const [core, setCore] = useState<CoreInfo | null>(null);
   const [phase, setPhase] = useState<Phase>("booting");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [identity, setIdentity] = useState<IdentityState | null>(null);
+  const [identityInfo, setIdentityInfo] = useState<IdentityStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -65,6 +69,20 @@ export function App() {
     if (!info?.runningInTauri) {
       setSnapshot(demoSnapshot());
       setPhase("directory");
+      return;
+    }
+
+    let status: IdentityStatus;
+    try {
+      status = await identityStatus();
+    } catch (failure) {
+      setError(toCommandError(failure).message);
+      setPhase("error");
+      return;
+    }
+    setIdentityInfo(status);
+    if (!status.configured) {
+      setPhase("identity");
       return;
     }
 
@@ -133,6 +151,13 @@ export function App() {
     await boot();
   }, [boot]);
 
+  const changeEmail = useCallback(async () => {
+    await clearIdentity().catch(() => undefined);
+    const status = await identityStatus().catch(() => null);
+    if (status) setIdentityInfo(status);
+    setPhase("identity");
+  }, []);
+
   if (phase === "booting") {
     return (
       <div className="desktop-boot">
@@ -145,6 +170,17 @@ export function App() {
         <Spinner />
         <p className="desktop-boot__text">Starting App Directory…</p>
       </div>
+    );
+  }
+
+  if (phase === "identity" && identityInfo) {
+    return (
+      <IdentityPrompt
+        status={identityInfo}
+        onSaved={() => {
+          void boot();
+        }}
+      />
     );
   }
 
@@ -182,6 +218,7 @@ export function App() {
       refreshError={refreshError}
       onRefresh={() => void refresh(true)}
       onOpenError={(message) => setRefreshError(message)}
+      onChangeEmail={() => void changeEmail()}
     />
   );
 }

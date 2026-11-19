@@ -30,6 +30,7 @@ export interface DirectoryProps {
   refreshError: string | null;
   onRefresh: () => void;
   onOpenError: (message: string) => void;
+  onChangeEmail: () => void;
 }
 
 export function Directory({
@@ -41,6 +42,7 @@ export function Directory({
   refreshError,
   onRefresh,
   onOpenError,
+  onChangeEmail,
 }: DirectoryProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -133,6 +135,7 @@ export function Directory({
         shown={visible.length}
         total={apps.length}
         onRefresh={onRefresh}
+        onChangeEmail={onChangeEmail}
       />
     </div>
   );

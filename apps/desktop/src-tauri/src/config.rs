@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 pub const DEFAULT_API_BASE_URL: &str = "http://172.168.50.50:8090";
 pub const APP_NAME: &str = "App Directory";
+/// Used only to suggest an email on first run; the user can change it before saving.
+pub const DEFAULT_MAIL_DOMAIN: &str = "nhit.co.in";
 
 /// Bumped only when the on-disk layout changes in a way that needs migration.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -45,6 +47,31 @@ pub fn icons_dir() -> PathBuf {
 
 pub fn config_path() -> PathBuf {
     data_dir().join("config.json")
+}
+
+/// The user's work email, entered once and reused on every launch.
+pub fn identity_path() -> PathBuf {
+    data_dir().join("identity.txt")
+}
+
+pub fn cached_identity() -> Option<String> {
+    std::fs::read_to_string(identity_path())
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn save_identity(email: &str) -> Result<(), String> {
+    let path = identity_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&path, email.trim())
+        .map_err(|error| format!("Could not save your email on this device: {error}"))
+}
+
+pub fn clear_identity() {
+    let _ = std::fs::remove_file(identity_path());
 }
 
 pub fn cache_path() -> PathBuf {
