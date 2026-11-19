@@ -140,6 +140,16 @@ pub fn save_config(value: &ClientConfig) -> Result<(), String> {
 /// Records a successful sync in `config.json`; the snapshot itself stores the payload.
 pub fn remember_sync(last_synced_at: DateTime<Utc>, revision: i64) -> Result<(), String> {
     let mut value = load_config();
+
+    // Nothing changed on the server: avoid a redundant disk write on every refresh.
+    let unchanged = value.revision == Some(revision)
+        && value
+            .last_synced_at
+            .is_some_and(|previous| (last_synced_at - previous).num_seconds() < 60);
+    if unchanged {
+        return Ok(());
+    }
+
     value.schema_version = config::SCHEMA_VERSION;
     value.last_synced_at = Some(last_synced_at);
     value.revision = Some(revision);

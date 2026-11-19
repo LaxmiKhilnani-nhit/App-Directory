@@ -1,11 +1,9 @@
 import type {
   AdminApp,
-  AdminGroup,
   AdminMe,
   AdminUser,
   AuditPage,
   Department,
-  GroupDetail,
   ImportReport,
   Setting,
   Stats,
@@ -26,14 +24,6 @@ export interface AppInput {
 }
 
 export type AppPatch = Partial<AppInput>;
-
-export interface GroupInput {
-  name: string;
-  description?: string | null;
-  autoDepartment?: string | null;
-}
-
-export type GroupPatch = Partial<GroupInput>;
 
 export interface UserInput {
   email: string;
@@ -101,11 +91,6 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ departmentIds }),
     }),
-  setAppGroups: (id: string, groupIds: string[]) =>
-    request<AdminApp>(`/api/v1/admin/apps/${id}/groups`, {
-      method: "PUT",
-      body: JSON.stringify({ groupIds }),
-    }),
   setAppUsers: (id: string, userIds: string[]) =>
     request<AdminApp>(`/api/v1/admin/apps/${id}/users`, {
       method: "PUT",
@@ -139,25 +124,6 @@ export const adminApi = {
     }),
   deleteDepartment: (id: string) =>
     request<void>(`/api/v1/admin/departments/${id}`, { method: "DELETE" }),
-
-  groups: () => request<AdminGroup[]>("/api/v1/admin/groups"),
-  group: (id: string) => request<GroupDetail>(`/api/v1/admin/groups/${id}`),
-  createGroup: (input: GroupInput) =>
-    request<AdminGroup>("/api/v1/admin/groups", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  updateGroup: (id: string, patch: GroupPatch) =>
-    request<AdminGroup>(`/api/v1/admin/groups/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    }),
-  deleteGroup: (id: string) => request<void>(`/api/v1/admin/groups/${id}`, { method: "DELETE" }),
-  setGroupMembers: (id: string, userIds: string[]) =>
-    request<GroupDetail>(`/api/v1/admin/groups/${id}/members`, {
-      method: "PUT",
-      body: JSON.stringify({ userIds }),
-    }),
 
   users: (params: UserQuery = {}) =>
     request<UserPage>(`/api/v1/admin/users${queryString({ ...params })}`),

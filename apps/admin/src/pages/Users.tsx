@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, EmptyState, SearchInput, Spinner } from "@app-directory/ui";
-import type { AdminUser, GroupDetail, Role } from "@app-directory/types";
+import type { AdminUser, Role } from "@app-directory/types";
 import { adminApi } from "../api/admin";
 import { PageHeader, Notice } from "../components/PageHeader";
 import { UserEditor } from "../components/UserEditor";
@@ -21,7 +21,6 @@ export function Users() {
   const [role, setRole] = useState<"" | Role>("");
   const [active, setActive] = useState<ActiveFilter>("all");
   const [department, setDepartment] = useState("");
-  const [groupFilter, setGroupFilter] = useState("");
   const [editor, setEditor] = useState<{ userId: string | null } | null>(null);
 
   useEffect(() => {
@@ -40,12 +39,6 @@ export function Users() {
     [applied, role, active],
   );
 
-  const groups = useAsync(() => adminApi.groups(), []);
-  const groupMembers = useAsync<GroupDetail | null>(
-    () => (groupFilter ? adminApi.group(groupFilter) : Promise.resolve(null)),
-    [groupFilter],
-  );
-
   const departments = useMemo(() => {
     const found = new Set<string>();
     for (const person of users.data?.users ?? []) {
@@ -55,13 +48,11 @@ export function Users() {
   }, [users.data]);
 
   const rows = useMemo(() => {
-    const memberIds = new Set(groupMembers.data?.userIds ?? []);
     return (users.data?.users ?? []).filter((person) => {
       if (department && (person.department ?? "") !== department) return false;
-      if (groupFilter && !memberIds.has(person.id)) return false;
       return true;
     });
-  }, [users.data, department, groupFilter, groupMembers.data]);
+  }, [users.data, department]);
 
   function onChanged(updated: AdminUser) {
     users.setData((previous) => {
@@ -82,7 +73,7 @@ export function Users() {
     <>
       <PageHeader
         title="Users & access"
-        description="Accounts, roles and direct app grants. Group access is managed on the Groups screen."
+        description="Accounts, roles, departments and direct app grants."
         actions={
           <Button variant="primary" onClick={() => setEditor({ userId: null })}>
             New account
@@ -91,8 +82,6 @@ export function Users() {
       />
 
       {users.error ? <Notice tone="danger">{users.error}</Notice> : null}
-      {groups.error ? <Notice tone="danger">{groups.error}</Notice> : null}
-      {groupMembers.error ? <Notice tone="danger">{groupMembers.error}</Notice> : null}
 
       <section className="admin-card">
         <div className="admin-toolbar">
@@ -136,18 +125,6 @@ export function Users() {
             ))}
           </select>
 
-          <select
-            value={groupFilter}
-            onChange={(event) => setGroupFilter(event.target.value)}
-            aria-label="Filter by group"
-          >
-            <option value="">All groups</option>
-            {(groups.data ?? []).map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         {users.loading && !users.data ? (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import type { AdminApp, AdminGroup, AdminUser, AppTile, Department } from "@app-directory/types";
+import type { AdminApp, AdminUser, AppTile, Department } from "@app-directory/types";
 import { adminApi, type AppInput } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../auth";
@@ -13,14 +13,13 @@ import { forgetIcon, useIconUrl } from "../hooks/useIconUrl";
 
 interface AppEditorProps {
   app: AdminApp | null;
-  groups: AdminGroup[];
   onClose: () => void;
   onChanged: (app: AdminApp | null) => void;
 }
 
 type Tab = "details" | "access";
 
-export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
+export function AppEditor({ app, onClose, onChanged }: AppEditorProps) {
   const { user } = useAuth();
   const isSuper = user?.role === "super_admin";
 
@@ -38,9 +37,6 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
 
   const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(
     () => new Set(app?.departmentIds ?? []),
-  );
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(
-    () => new Set(app?.groupIds ?? []),
   );
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(
     () => new Set(app?.userIds ?? []),
@@ -67,7 +63,6 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
   function resetAccessState(updated: AdminApp) {
     setCurrent(updated);
     setSelectedDepartments(new Set(updated.departmentIds));
-    setSelectedGroups(new Set(updated.groupIds));
     setSelectedUsers(new Set(updated.userIds));
     onChanged(updated);
   }
@@ -95,7 +90,7 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
         : await adminApi.updateApp(current!.id, payload);
 
       resetAccessState(saved);
-      setNotice(creating ? "App created. Add group or user access next." : "Changes saved.");
+      setNotice(creating ? "App created. Add department or user access next." : "Changes saved.");
       if (creating) setTab("access");
     } catch (cause) {
       setError(errorMessage(cause));
@@ -135,22 +130,6 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
       setError(errorMessage(cause));
     } finally {
       setIconBusy(false);
-    }
-  }
-
-  async function saveGroups() {
-    if (!current) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const updated = await adminApi.setAppGroups(current.id, [...selectedGroups]);
-      resetAccessState(updated);
-      setNotice("Group access saved.");
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -440,58 +419,17 @@ export function AppEditor({ app, groups, onClose, onChanged }: AppEditorProps) {
             <hr className="admin-divider" />
 
             <div className="admin-stack-sm">
-              <h3 className="admin-section-title">Groups with access</h3>
-              <p className="admin-inline-hint">
-                Everyone in a selected group sees this tile: explicit members and the built-in All
-                Users group.
-              </p>
-              <div className="admin-checklist">
-                {groups.length === 0 ? (
-                  <div className="admin-empty-inline">No groups exist yet.</div>
-                ) : (
-                  groups.map((group) => (
-                    <CheckboxField
-                      key={group.id}
-                      label={`${group.name}${group.isAllUsers ? " (everyone)" : ""}`}
-                      hint={
-                        group.autoDepartment
-                          ? `Automatic · department ${group.autoDepartment} · ${group.memberCount} members`
-                          : `${group.memberCount} members`
-                      }
-                      checked={selectedGroups.has(group.id)}
-                      onChange={(checked) =>
-                        setSelectedGroups((previous) => {
-                          const next = new Set(previous);
-                          if (checked) next.add(group.id);
-                          else next.delete(group.id);
-                          return next;
-                        })
-                      }
-                    />
-                  ))
-                )}
-              </div>
-              <div className="admin-actions">
-                <Button variant="primary" size="sm" onClick={saveGroups} disabled={busy}>
-                  Save group access
-                </Button>
-              </div>
-            </div>
-
-            <hr className="admin-divider" />
-
-            <div className="admin-stack-sm">
               <h3 className="admin-section-title">Direct user access</h3>
               {!isSuper ? (
                 <Notice>
-                  Searching accounts is limited to super admins. App admins manage access through
-                  groups; direct grants can still be added by a super admin.
+                  Searching accounts is limited to super admins. Department grants can still be
+                  managed here; direct grants can be added by a super admin.
                 </Notice>
               ) : (
                 <>
                   <div className="admin-inline-hint">
-                    Direct grants are on top of group access. Removing a group grant here does not
-                    take away access a person gets elsewhere.
+                    Direct grants are on top of department access. Removing a grant here does not
+                    take away access a person gets through their department.
                   </div>
 
                   <div className="admin-chiprow">

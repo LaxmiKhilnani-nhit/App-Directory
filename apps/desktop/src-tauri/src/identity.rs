@@ -1,13 +1,17 @@
 //! Identifies the user to the server. The email is entered once and cached on the device,
 //! because a Windows account name is not always the same as the person's email local part.
 
+use std::os::windows::process::CommandExt;
 use std::process::Command;
+
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use crate::config;
 
 /// `whoami` on Windows prints `DOMAIN\user`; on other platforms it may print just `user`.
 pub fn windows_identity() -> String {
     let output = Command::new("whoami")
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()
         .filter(|result| result.status.success());

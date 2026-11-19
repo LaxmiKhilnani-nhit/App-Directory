@@ -112,9 +112,11 @@ fn clear_identity(client: State<'_, Client>) {
     client.api.set_identity(&user_identity::current());
 }
 
-/// Boot probe: derive the Windows identity, check the cached snapshot, and try the server.
+/// Boot probe: reads local data only. There is deliberately no `/auth/me` call here — the
+/// server trusts the cached identity, and the background sync confirms it without delaying
+/// the first render.
 #[tauri::command]
-async fn identity_state(client: State<'_, Client>) -> Result<IdentityState, CommandError> {
+fn identity_state() -> Result<IdentityState, CommandError> {
     let raw = identity::windows_identity();
     let cached = cache::load().ok().flatten();
     let now = Utc::now();
@@ -136,18 +138,7 @@ async fn identity_state(client: State<'_, Client>) -> Result<IdentityState, Comm
         state.department = stored.payload.user.department.clone();
     }
 
-    match client.api.session_user(Duration::from_secs(4)).await {
-        Ok(user) => {
-            state.name = Some(user.name);
-            state.department = user.department;
-            state.server_reachable = true;
-            state.known_user = true;
-        }
-        Err(error) if error.code == "unknown_user" => {
-            state.known_user = false;
-        }
-        Err(_) => {}
-    }
+    state.known_user = cached.is_some();
 
     Ok(state)
 }

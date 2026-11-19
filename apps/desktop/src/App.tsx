@@ -99,7 +99,20 @@ export function App() {
     }
     setIdentity(state);
 
+    // Show the encrypted snapshot immediately, before any network call. The live sync below
+    // replaces it when it returns; if the server is down the user still has their apps.
+    const cached = await cachedSnapshot().catch(() => null);
+    const showedCache = Boolean(cached && !cached.expired);
+    if (showedCache) {
+      setSnapshot(cached);
+      setPhase("directory");
+    }
+
     const failure = await loadDirectory(state.cacheAvailable && !state.cacheExpired);
+    if (failure && showedCache) {
+      // Offline with a valid snapshot is a normal state; the banner in the directory explains it.
+      return;
+    }
     if (failure) {
       if (failure.code === "unknown_user") {
         setError(

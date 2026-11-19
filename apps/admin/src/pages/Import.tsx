@@ -4,26 +4,24 @@ import type { ImportReport } from "@app-directory/types";
 import { adminApi } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { PageHeader, Notice } from "../components/PageHeader";
-import { useAsync } from "../hooks/useAsync";
 
 interface ParsedRow {
   line: number;
   name: string;
   email: string;
   department: string;
-  groups: string[];
 }
 
 interface ParsedCsv {
   columns: string[];
-  mapping: { name: string; email: string; department: string | null; groups: string | null };
+  mapping: { name: string; email: string; department: string | null };
   rows: ParsedRow[];
   error: string | null;
 }
 
 const EMPTY: ParsedCsv = {
   columns: [],
-  mapping: { name: "", email: "", department: null, groups: null },
+  mapping: { name: "", email: "", department: null },
   rows: [],
   error: null,
 };
@@ -81,7 +79,6 @@ function parseCsv(text: string): ParsedCsv {
   }
 
   const departmentIndex = indexOfAny(["department", "dept"]);
-  const groupsIndex = indexOfAny(["groups", "group"]);
   const field = (fields: string[], index: number) => (index >= 0 ? (fields[index] ?? "") : "");
 
   const rows = lines.slice(1).map(({ line, raw }) => {
@@ -91,10 +88,6 @@ function parseCsv(text: string): ParsedCsv {
       name: field(fields, nameIndex),
       email: field(fields, emailIndex),
       department: field(fields, departmentIndex),
-      groups: field(fields, groupsIndex)
-        .split(";")
-        .map((group) => group.trim())
-        .filter(Boolean),
     };
   });
 
@@ -104,14 +97,13 @@ function parseCsv(text: string): ParsedCsv {
       name: columns[nameIndex] ?? "name",
       email: columns[emailIndex] ?? "email",
       department: departmentIndex >= 0 ? (columns[departmentIndex] ?? null) : null,
-      groups: groupsIndex >= 0 ? (columns[groupsIndex] ?? null) : null,
     },
     rows,
     error: null,
   };
 }
 
-function rowErrors(row: ParsedRow, seen: Set<string>, knownGroups: Set<string> | null): string[] {
+function rowErrors(row: ParsedRow, seen: Set<string>): string[] {
   const problems: string[] = [];
   if (!row.name.trim()) problems.push("Name is empty.");
   if (!row.email.trim()) problems.push("Email is empty.");
@@ -124,11 +116,6 @@ function rowErrors(row: ParsedRow, seen: Set<string>, knownGroups: Set<string> |
     seen.add(key);
   }
 
-  if (knownGroups) {
-    const unknown = row.groups.filter((group) => !knownGroups.has(group.toLowerCase()));
-    if (unknown.length > 0) problems.push(`Unknown group: ${unknown.join(", ")}.`);
-  }
-
   return problems;
 }
 
@@ -138,28 +125,16 @@ export function Import() {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-
-  const groups = useAsync(() => adminApi.groups(), []);
 
   const parsed = useMemo(() => (csv.trim() ? parseCsv(csv) : EMPTY), [csv]);
 
-  const knownGroups = useMemo(() => {
-    const names = new Set<string>();
-    for (const group of groups.data ?? []) {
-      if (!group.isAllUsers && !group.autoDepartment) names.add(group.name.toLowerCase());
-    }
-    return names;
-  }, [groups.data]);
-
   const checked = useMemo(() => {
     const seen = new Set<string>();
-    const groupsReady = groups.data ? knownGroups : null;
     return parsed.rows.map((row) => ({
       row,
-      problems: rowErrors(row, seen, groupsReady),
+      problems: rowErrors(row, seen),
     }));
-  }, [parsed.rows, knownGroups, groups.data]);
+  }, [parsed.rows]);
 
   const validRows = checked.filter((entry) => entry.problems.length === 0).length;
   const problemRows = checked.filter((entry) => entry.problems.length > 0).length;
@@ -200,15 +175,13 @@ export function Import() {
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {groups.error ? <Notice tone="danger">{groups.error}</Notice> : null}
 
       <section className="admin-card">
         <div className="admin-form-stack">
           <div className="admin-stack-sm">
             <h3 className="admin-section-title">1. Choose a file or paste CSV</h3>
             <p className="admin-inline-hint">
-              Header: <code>name,email,department,groups</code>. Separate multiple groups with a
-              semicolon. Unknown groups are row errors — create them first.
+              Header: <code>name,email,department</code>. Extra columns are ignored.
             </p>
             <div className="admin-actions">
               <label className="ad-btn ad-btn--secondary" style={{ cursor: "pointer" }}>
@@ -241,9 +214,7 @@ export function Import() {
             style={{ minHeight: 130 }}
             value={csv}
             onChange={(event) => setCsv(event.target.value)}
-            placeholder={
-              "name,email,department,groups\nRahul Sharma,rahul@example.com,Finance,Finance;Reporting"
-            }
+            placeholder="name,email,department\nRahul Sharma,rahul@example.com,Finance"
             aria-label="CSV contents"
           />
 
@@ -257,9 +228,6 @@ export function Import() {
                 <span className="admin-chip">Email ← {parsed.mapping.email}</span>
                 <span className="admin-chip">
                   Department ← {parsed.mapping.department ?? "not provided"}
-                </span>
-                <span className="admin-chip">
-                  Groups ← {parsed.mapping.groups ?? "not provided"}
                 </span>
               </div>
             </div>
@@ -285,13 +253,6 @@ export function Import() {
                 </span>
               </div>
 
-              {groups.data ? (
-                <p className="admin-inline-hint">
-                  {knownGroups.size} manual {knownGroups.size === 1 ? "group" : "groups"} can be
-                  referenced. Automatic and All Users groups cannot be used in this file.
-                </p>
-              ) : null}
-
               <div className="admin-table-wrap" style={{ maxHeight: 360, overflowY: "auto" }}>
                 <table className="admin-table">
                   <thead>
@@ -300,7 +261,6 @@ export function Import() {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Department</th>
-                      <th>Groups</th>
                       <th>Check</th>
                     </tr>
                   </thead>
@@ -311,9 +271,6 @@ export function Import() {
                         <td>{row.name || "—"}</td>
                         <td className="admin-mono">{row.email || "—"}</td>
                         <td className="admin-muted-cell">{row.department || "—"}</td>
-                        <td className="admin-muted-cell">
-                          {row.groups.length > 0 ? row.groups.join("; ") : "—"}
-                        </td>
                         <td>
                           {problems.length === 0 ? (
                             <Badge tone="success">Ready</Badge>

@@ -122,22 +122,6 @@ export interface Department {
   updatedAt: string;
 }
 
-export interface AdminGroup {
-  id: string;
-  name: string;
-  description: string | null;
-  autoDepartment: string | null;
-  isAllUsers: boolean;
-  createdAt: string;
-  updatedAt: string;
-  memberCount: number;
-  appCount: number;
-}
-
-export interface GroupDetail extends AdminGroup {
-  userIds: string[];
-}
-
 export interface AdminUser {
   id: string;
   email: string;

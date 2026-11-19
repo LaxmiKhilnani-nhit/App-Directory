@@ -22,7 +22,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/// Server screens for groups, users, imports, settings and audit are super-admin only.
+/// Server screens for departments, users, imports, settings and audit are super-admin only.
 /// App admins are redirected to the app list their scope can actually reach.
 export function SuperAdminOnly({ children }: { children: ReactNode }) {
   const { user } = useAuth();

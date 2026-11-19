@@ -195,6 +195,10 @@ The client is a single portable `.exe` that installs nothing. It keeps its state
 | `server.txt` | optional override for the server URL |
 | `updates\` | staged update downloaded from the server |
 
+- Launch renders the encrypted cache immediately; live sync and icon refresh happen in the
+  background with short timeouts, so an unreachable server does not delay the tiles.
+- The exe is a GUI-subsystem binary with no console attached, and every child process is
+  started with `CREATE_NO_WINDOW` — no cmd window appears on the desktop.
 - First launch writes desktop and Start-menu shortcuts without overwriting existing ones.
 - Sync runs at launch, on the server's `sync_interval_hours` cadence, and on demand (once/minute).
 - Offline: last snapshot renders with a banner until `offline_valid_until`, then a retry screen.

@@ -5,8 +5,11 @@
 //! launch swaps it in before the UI opens. Nothing is installed and no click is required.
 
 use std::fs;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
+
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use sha2::{Digest, Sha256};
 
@@ -74,11 +77,15 @@ pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
     }
 
     fs::create_dir_all(updates_dir()).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not create the update folder: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not create the update folder: {error}"),
+        )
     })?;
 
     let expected = info.sha256.trim().to_lowercase();
-    if let (Ok(bytes), Ok(stored_hash)) = (fs::read(staged_path()), fs::read_to_string(hash_path())) {
+    if let (Ok(bytes), Ok(stored_hash)) = (fs::read(staged_path()), fs::read_to_string(hash_path()))
+    {
         if stored_hash.trim().eq_ignore_ascii_case(&expected) && hash_hex(&bytes) == expected {
             return Ok(true);
         }
@@ -105,10 +112,16 @@ pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
     }
 
     fs::write(staged_path(), &bytes).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not stage the update: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not stage the update: {error}"),
+        )
     })?;
     fs::write(hash_path(), &expected).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not record the checksum: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not record the checksum: {error}"),
+        )
     })?;
 
     Ok(true)
@@ -123,7 +136,10 @@ pub fn apply_staged() -> Result<bool, CommandError> {
     }
 
     let bytes = fs::read(&path).map_err(|error| {
-        CommandError::new("update_failed", format!("Could not read the staged update: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not read the staged update: {error}"),
+        )
     })?;
     let expected = fs::read_to_string(hash_path()).unwrap_or_default();
     if expected.trim().is_empty() || hash_hex(&bytes) != expected.trim().to_lowercase() {
@@ -133,7 +149,10 @@ pub fn apply_staged() -> Result<bool, CommandError> {
     }
 
     let current = std::env::current_exe().map_err(|error| {
-        CommandError::new("update_failed", format!("Could not locate the running exe: {error}"))
+        CommandError::new(
+            "update_failed",
+            format!("Could not locate the running exe: {error}"),
+        )
     })?;
     let backup = current.with_file_name("App Directory.old.exe");
 
@@ -160,7 +179,10 @@ pub fn apply_staged() -> Result<bool, CommandError> {
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(hash_path());
 
-    match Command::new(&current).spawn() {
+    match Command::new(&current)
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    {
         Ok(_) => {
             std::process::exit(0);
         }
