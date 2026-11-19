@@ -366,6 +366,8 @@ struct CsvRow {
 }
 
 fn parse_csv(text: &str) -> Result<Vec<CsvRow>, ApiError> {
+    // Excel writes a UTF-8 BOM, which otherwise becomes part of the first header column.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut lines = text
         .lines()
         .enumerate()
@@ -376,23 +378,39 @@ fn parse_csv(text: &str) -> Result<Vec<CsvRow>, ApiError> {
         return Err(ApiError::bad_request("invalid_csv", "The file is empty."));
     };
 
-    let columns: Vec<String> = validate::split_csv_line(header)
+    // Excel with Indian regional settings uses ';' as the separator.
+    let delimiter = if header.matches(';').count() > header.matches(',').count() {
+        ';'
+    } else {
+        ','
+    };
+
+    let columns: Vec<String> = validate::split_csv_line_delimited(header, delimiter)
         .iter()
         .map(|column| column.trim().to_lowercase().replace(' ', "_"))
         .collect();
-    let index_of = |name: &str| columns.iter().position(|column| column == name);
-    let (Some(email_index), Some(name_index)) = (index_of("email"), index_of("name")) else {
+    let index_of_any = |names: &[&str]| {
+        columns
+            .iter()
+            .position(|column| names.contains(&column.as_str()))
+    };
+    let email_index = index_of_any(&["email", "email_address", "work_email", "e_mail"]);
+    let name_index = index_of_any(&["name", "full_name", "employee_name", "person_name"]);
+    let (Some(email_index), Some(name_index)) = (email_index, name_index) else {
         return Err(ApiError::bad_request(
             "invalid_csv",
-            "The header must include name and email columns.",
+            format!(
+                "The header must include name and email columns. Found: {}",
+                columns.join(", ")
+            ),
         ));
     };
-    let department_index = index_of("department");
-    let groups_index = index_of("groups");
+    let department_index = index_of_any(&["department", "dept"]);
+    let groups_index = index_of_any(&["groups", "group"]);
 
     let mut rows = Vec::new();
     for (line, raw) in lines {
-        let fields = validate::split_csv_line(raw);
+        let fields = validate::split_csv_line_delimited(raw, delimiter);
         let field = |index: Option<usize>| {
             index
                 .and_then(|index| fields.get(index))

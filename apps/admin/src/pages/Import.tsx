@@ -29,7 +29,7 @@ const EMPTY: ParsedCsv = {
 };
 
 /** Mirrors the server's line splitter so the preview matches what will be stored. */
-function splitCsvLine(line: string): string[] {
+function splitCsvLine(line: string, delimiter: string = ","): string[] {
   const fields: string[] = [];
   let current = "";
   let quoted = false;
@@ -41,7 +41,7 @@ function splitCsvLine(line: string): string[] {
       index += 1;
     } else if (character === '"') {
       quoted = !quoted;
-    } else if (character === "," && !quoted) {
+    } else if (character === delimiter && !quoted) {
       fields.push(current.trim());
       current = "";
     } else {
@@ -54,34 +54,38 @@ function splitCsvLine(line: string): string[] {
 }
 
 function parseCsv(text: string): ParsedCsv {
-  const lines = text
+  // Excel adds a UTF-8 BOM; without stripping it the first header is "\uFEFFname".
+  const clean = text.replace(/^\uFEFF/, "");
+  const lines = clean
     .split(/\r?\n/)
     .map((raw, index) => ({ line: index + 1, raw }))
     .filter((entry) => entry.raw.trim() !== "");
 
   if (lines.length === 0) return { ...EMPTY, error: "The file is empty." };
 
-  const columns = splitCsvLine(lines[0]!.raw).map((column) =>
+  const header = lines[0]!.raw;
+  const delimiter = (header.match(/;/g)?.length ?? 0) > (header.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const columns = splitCsvLine(header, delimiter).map((column) =>
     column.trim().toLowerCase().replace(/ /g, "_"),
   );
-  const indexOf = (name: string) => columns.indexOf(name);
+  const indexOfAny = (names: string[]) => columns.findIndex((column) => names.includes(column));
 
-  const nameIndex = indexOf("name");
-  const emailIndex = indexOf("email");
+  const nameIndex = indexOfAny(["name", "full_name", "employee_name", "person_name"]);
+  const emailIndex = indexOfAny(["email", "email_address", "work_email", "e_mail"]);
   if (nameIndex < 0 || emailIndex < 0) {
     return {
       ...EMPTY,
       columns,
-      error: "The header must include name and email columns.",
+      error: `The header must include name and email columns. Found: ${columns.join(", ")}`,
     };
   }
 
-  const departmentIndex = indexOf("department");
-  const groupsIndex = indexOf("groups");
+  const departmentIndex = indexOfAny(["department", "dept"]);
+  const groupsIndex = indexOfAny(["groups", "group"]);
   const field = (fields: string[], index: number) => (index >= 0 ? (fields[index] ?? "") : "");
 
   const rows = lines.slice(1).map(({ line, raw }) => {
-    const fields = splitCsvLine(raw);
+    const fields = splitCsvLine(raw, delimiter);
     return {
       line,
       name: field(fields, nameIndex),

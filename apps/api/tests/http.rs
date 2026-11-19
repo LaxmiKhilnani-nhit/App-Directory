@@ -98,6 +98,26 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
 }
 
 #[tokio::test]
+async fn csv_import_accepts_excel_bom_and_semicolons() {
+    let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
+
+    let csv = "\u{feff}name;email;department;groups\nLaxmi;laxmi@nhit.co.in;IT;\n";
+    let (status, body) = json(
+        &h,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some("ad\\admin"),
+        json!({ "csv": csv }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["created"], json!(1), "{body}");
+    assert_eq!(body["errors"].as_array().unwrap().len(), 0, "{body}");
+}
+
+#[tokio::test]
 async fn normal_users_cannot_use_the_admin_portal() {
     let h = setup();
     add_user(&h, "laxmikhilnani", Some("IT"), true);

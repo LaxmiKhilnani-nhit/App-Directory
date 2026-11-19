@@ -70,7 +70,10 @@ pub fn validate_url(url: &str) -> Result<String, ApiError> {
         ));
     }
     if parsed.host_str().is_none() {
-        return Err(ApiError::bad_request("invalid_url", "URL is missing a host."));
+        return Err(ApiError::bad_request(
+            "invalid_url",
+            "URL is missing a host.",
+        ));
     }
     Ok(trimmed.to_string())
 }
@@ -79,7 +82,9 @@ pub fn validate_color(color: &str) -> Result<String, ApiError> {
     let trimmed = color.trim();
     let valid = trimmed.len() == 7
         && trimmed.starts_with('#')
-        && trimmed[1..].chars().all(|character| character.is_ascii_hexdigit());
+        && trimmed[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit());
     if !valid {
         return Err(ApiError::bad_request(
             "invalid_color",
@@ -223,6 +228,11 @@ pub fn scope_for(role: &str, value: Option<Value>) -> Result<Option<Value>, ApiE
 
 /// Minimal RFC-4180 reader used by the bulk user import endpoint.
 pub fn split_csv_line(line: &str) -> Vec<String> {
+    split_csv_line_delimited(line, ',')
+}
+
+/// Splits one CSV line using the given separator (Excel sometimes writes `;`).
+pub fn split_csv_line_delimited(line: &str, delimiter: char) -> Vec<String> {
     let mut fields = Vec::new();
     let mut current = String::new();
     let mut quoted = false;
@@ -235,7 +245,7 @@ pub fn split_csv_line(line: &str) -> Vec<String> {
                 characters.next();
             }
             '"' => quoted = !quoted,
-            ',' if !quoted => {
+            character if character == delimiter && !quoted => {
                 fields.push(current.trim().to_string());
                 current.clear();
             }
