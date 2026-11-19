@@ -130,6 +130,15 @@ pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
 /// Called at startup, before the UI opens. Replaces the running exe with a verified staged
 /// one and launches it. Returns `false` when there is nothing to apply.
 pub fn apply_staged() -> Result<bool, CommandError> {
+    // Windows may have kept a handle to the previous exe until it exited. Delete it here on
+    // the new process's first launch, so no `.old.exe` is left on the user's machine.
+    if let Ok(current) = std::env::current_exe() {
+        let previous = current.with_file_name("App Directory.old.exe");
+        if previous.exists() {
+            let _ = fs::remove_file(&previous);
+        }
+    }
+
     let path = staged_path();
     if !path.is_file() {
         return Ok(false);
@@ -184,6 +193,8 @@ pub fn apply_staged() -> Result<bool, CommandError> {
         .spawn()
     {
         Ok(_) => {
+            // Usually the old process still holds this file; the new process cleans it up.
+            let _ = fs::remove_file(&backup);
             std::process::exit(0);
         }
         Err(error) => {
