@@ -30,7 +30,6 @@ const TITLES: Record<string, string> = {
 
 const ROLE_LABEL: Record<string, string> = {
   super_admin: "Super admin",
-  app_admin: "App admin",
   user: "User",
 };
 

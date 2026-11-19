@@ -10,6 +10,10 @@ services:
       APP_NAME: ${APP_NAME:-App Directory}
       RUST_LOG: ${RUST_LOG:-info}
       DATA_DIR: /app/data
+      # Seeds admins.csv on first start only. Set BOOTSTRAP_ADMIN_PASSWORD in .env before
+      # deploying; editing it later requires removing data/admins.csv (the hash is not rewritten).
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       # Optional: point this at the portable client if it is not at the default path.
       # CLIENT_EXE: /app/client/App Directory.exe
     ports:

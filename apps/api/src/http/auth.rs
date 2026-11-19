@@ -1,20 +1,20 @@
-//! Compatibility auth endpoints.
-//!
-//! Identity is trusted from `X-Windows-Identity`; no password, session, reset code or SMTP
-//! machinery remains. These routes exist so the unmodified admin SPA and desktop client
-//! keep working: login returns a dummy `"csv"` token and the other endpoints are no-ops.
+//! Admin authentication. Credentials live in `admins.csv`, separate from `users.csv`, and
+//! passwords are verified with Argon2id. Successful login issues a signed, expiring token.
 
 use axum::{
-    extract::{rejection::JsonRejection, Query, State},
-    http::{HeaderMap, StatusCode},
+    extract::{rejection::JsonRejection, State},
+    http::StatusCode,
     Json,
 };
 use chrono::{Duration, Utc};
 use serde::Deserialize;
+use uuid::Uuid;
 
+use crate::domain::admins;
 use crate::domain::models::{LoginResponse, SessionUser};
 use crate::error::{ApiError, ApiResult};
-use crate::http::identity::{self, TrustedUser};
+use crate::http::identity::TrustedUser;
+use crate::http::json_body;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -26,72 +26,61 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct IdentityQuery {
-    pub identity: Option<String>,
-}
-
 pub async fn login(
     State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(params): Query<IdentityQuery>,
     body: Result<Json<LoginRequest>, JsonRejection>,
 ) -> ApiResult<Json<LoginResponse>> {
-    // Some clients send the Windows identity in the login form's email field; tolerate a
-    // completely empty/optional body too so the SPA can sign in with just a proxy header.
-    let email = match body {
-        Ok(Json(request)) => request.email,
-        Err(_) => String::new(),
-    };
+    let request = json_body(body)?;
+    let email = request.email.trim().to_lowercase();
 
-    let header_identity = headers
-        .get("x-windows-identity")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-
-    let raw = header_identity
-        .or_else(|| params.identity.clone())
-        .or_else(|| {
-            if email.trim().is_empty() {
-                None
-            } else {
-                Some(email.clone())
-            }
-        })
-        .ok_or_else(|| ApiError::unauthorized("A Windows identity is required."))?;
-
-    let user = identity::find_user(&state, &raw).ok_or_else(|| {
+    let admin = admins::find(&state, &email).ok_or_else(|| {
         ApiError::new(
             StatusCode::UNAUTHORIZED,
-            "unknown_user",
-            "This Windows account is not registered in the App Directory.",
+            "invalid_credentials",
+            "Email or password is incorrect.",
         )
     })?;
 
-    // This login exists for the admin portal. Normal users use the desktop client, which
-    // does not sign in; refuse to hand them an admin token.
-    if !matches!(user.role.as_str(), "super_admin" | "app_admin") {
-        return Err(ApiError::forbidden(
-            "admin_only",
-            "This account is not an administrator.",
+    if !admins::verify_password(&admin, &request.password) {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_credentials",
+            "Email or password is incorrect.",
         ));
     }
 
     let now = Utc::now();
-    let session = SessionUser::from(&user);
-    let user_id = user.id;
+    let token = admins::issue_token(&state, &admin.email);
 
+    let session = match crate::http::identity::find_user(&state, &admin.email) {
+        Some(user) => SessionUser {
+            id: user.id,
+            email: user.email,
+            name: admin.name.clone(),
+            department: user.department,
+            role: "super_admin".to_string(),
+            admin_scope: None,
+            must_change_password: false,
+        },
+        None => SessionUser {
+            id: Uuid::new_v5(&Uuid::NAMESPACE_DNS, format!("admin:{}", admin.email).as_bytes()),
+            email: admin.email.clone(),
+            name: admin.name.clone(),
+            department: None,
+            role: "super_admin".to_string(),
+            admin_scope: None,
+            must_change_password: false,
+        },
+    };
+
+    let actor_id = session.id;
+    let actor_email = session.email.clone();
     let _ = state.store.mutate(|data| {
-        if let Some(row) = data.users.iter_mut().find(|row| row.id == user_id) {
-            row.last_login_at = Some(now);
-        }
         data.audit(
-            Some(user_id),
-            Some(user.email.clone()),
+            Some(actor_id),
+            Some(actor_email.clone()),
             "auth.login",
-            "session",
+            "admin",
             None,
             None,
             None,
@@ -99,12 +88,10 @@ pub async fn login(
         Ok(())
     });
 
-    // The token carries the signed-in identity so the admin role gate can resolve the same
-    // account on every later request. It is not a secret — identity is trusted by design.
     Ok(Json(LoginResponse {
-        token: user.email.clone(),
-        expires_at: now + Duration::days(365 * 10),
-        user: session.clone(),
+        token,
+        expires_at: now + Duration::days(30),
+        user: session,
         must_change_password: false,
     }))
 }
@@ -113,7 +100,7 @@ pub async fn me(TrustedUser(user): TrustedUser) -> Json<SessionUser> {
     Json(user)
 }
 
-/// No sessions exist, so there is nothing to revoke. The admin SPA just needs a 2xx.
+/// Tokens are stateless; there is nothing to revoke server-side.
 pub async fn logout() -> StatusCode {
     StatusCode::NO_CONTENT
 }

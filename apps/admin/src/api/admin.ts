@@ -139,6 +139,8 @@ export const adminApi = {
       body: JSON.stringify(patch),
     }),
   deactivateUser: (id: string) => request<void>(`/api/v1/admin/users/${id}`, { method: "DELETE" }),
+  purgeUser: (id: string) =>
+    request<void>(`/api/v1/admin/users/${id}/purge`, { method: "DELETE" }),
   setUserApps: (id: string, appIds: string[]) =>
     request<UserDetail>(`/api/v1/admin/users/${id}/apps`, {
       method: "PUT",

@@ -8,6 +8,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer } from "./Drawer";
 import { CheckboxField, TextAreaField, TextField } from "./Form";
 import { Notice } from "./PageHeader";
+import { showToast } from "./Toast";
 import { useAsync } from "../hooks/useAsync";
 import { forgetIcon, useIconUrl } from "../hooks/useIconUrl";
 
@@ -67,6 +68,12 @@ export function AppEditor({ app, onClose, onChanged }: AppEditorProps) {
     onChanged(updated);
   }
 
+  /** Confirm briefly, then return to the list the editor was opened from. */
+  function savedAndClose(message: string) {
+    showToast(message);
+    window.setTimeout(onClose, 200);
+  }
+
   async function saveDetails() {
     setBusy(true);
     setError(null);
@@ -89,9 +96,8 @@ export function AppEditor({ app, onClose, onChanged }: AppEditorProps) {
         ? await adminApi.createApp(payload)
         : await adminApi.updateApp(current!.id, payload);
 
-      resetAccessState(saved);
-      setNotice(creating ? "App created. Add department or user access next." : "Changes saved.");
-      if (creating) setTab("access");
+      onChanged(saved);
+      savedAndClose(creating ? "App created" : "Saved");
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -140,8 +146,8 @@ export function AppEditor({ app, onClose, onChanged }: AppEditorProps) {
     setNotice(null);
     try {
       const updated = await adminApi.setAppUsers(current.id, [...selectedUsers]);
-      resetAccessState(updated);
-      setNotice("Direct user access saved.");
+      onChanged(updated);
+      savedAndClose("Saved");
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -403,7 +409,7 @@ export function AppEditor({ app, onClose, onChanged }: AppEditorProps) {
                           .setAppDepartments(current.id, [...next])
                           .then((updated) => {
                             setCurrent(updated);
-                            setNotice("Department access saved.");
+                            showToast("Saved");
                             onChanged(updated);
                           })
                           .catch((cause) => setError(errorMessage(cause)))

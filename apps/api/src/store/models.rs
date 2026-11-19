@@ -85,6 +85,23 @@ pub struct UserRow {
 }
 
 #[derive(Debug, Clone)]
+pub struct DeletedUserRow {
+    pub id: Uuid,
+    pub email: String,
+    pub name: String,
+    pub department: Option<String>,
+    pub role: String,
+    pub admin_scope: Option<Value>,
+    pub is_active: bool,
+    pub must_change_password: bool,
+    pub last_login_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: DateTime<Utc>,
+    pub deleted_by: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GroupRow {
     pub id: Uuid,
     pub name: String,
@@ -177,6 +194,7 @@ pub struct AuditRow {
 #[derive(Debug, Default)]
 pub struct Data {
     pub users: Vec<UserRow>,
+    pub deleted_users: Vec<DeletedUserRow>,
     pub departments: Vec<DepartmentRow>,
     pub app_departments: Vec<AppDepartmentRow>,
     pub groups: Vec<GroupRow>,

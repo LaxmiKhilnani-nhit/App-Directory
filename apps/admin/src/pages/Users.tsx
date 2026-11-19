@@ -9,7 +9,6 @@ import { formatRelative } from "../utils/format";
 
 function RoleBadge({ role }: { role: Role }) {
   if (role === "super_admin") return <Badge tone="accent">Super admin</Badge>;
-  if (role === "app_admin") return <Badge tone="warning">App admin</Badge>;
   return <Badge tone="neutral">User</Badge>;
 }
 
@@ -98,7 +97,6 @@ export function Users() {
           >
             <option value="">All roles</option>
             <option value="user">User</option>
-            <option value="app_admin">App admin</option>
             <option value="super_admin">Super admin</option>
           </select>
 
@@ -200,7 +198,7 @@ export function Users() {
       </section>
 
       {editor ? (
-        <UserEditor userId={editor.userId} onClose={() => setEditor(null)} onChanged={onChanged} />
+        <UserEditor userId={editor.userId} onClose={() => setEditor(null)} onChanged={onChanged} onDeleted={users.reload} />
       ) : null}
     </>
   );

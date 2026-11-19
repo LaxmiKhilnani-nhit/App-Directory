@@ -6,7 +6,7 @@
  * field names identical to the Rust serialisation so the switch is mechanical.
  */
 
-export type Role = "user" | "app_admin" | "super_admin";
+export type Role = "user" | "super_admin";
 
 export interface SessionUser {
   id: string;
@@ -14,7 +14,7 @@ export interface SessionUser {
   name: string;
   department: string | null;
   role: Role;
-  /** Limits an `app_admin` to a set of app categories; absent for other roles. */
+  /** Reserved for category-scoped admins; always null now that only `super_admin` remains. */
   adminScope: { categories?: string[] } | null;
   mustChangePassword: boolean;
 }

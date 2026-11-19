@@ -27,9 +27,11 @@ async fn require_admin(State(state): State<AppState>, request: Request, next: Ne
     let query_identity = identity::query_value(&parts, "identity");
     let allowed = identity::resolve(&parts, query_identity.as_deref(), &state)
         .as_deref()
-        .and_then(|raw| identity::find_user(&state, raw))
-        .map(|user| matches!(user.role.as_str(), "super_admin" | "app_admin"))
-        .unwrap_or(false);
+        .and_then(|raw| {
+            let email = identity::normalize(raw, &state.mail_domain());
+            crate::domain::admins::find(&state, &email)
+        })
+        .is_some();
 
     if !allowed {
         return (
@@ -99,6 +101,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(users::get).patch(users::update).delete(users::delete),
         )
         .route("/api/v1/admin/users/{id}/apps", put(users::set_apps))
+        .route(
+            "/api/v1/admin/users/{id}/purge",
+            axum::routing::delete(users::purge),
+        )
         .route(
             "/api/v1/admin/settings",
             get(settings::list).put(settings::update),

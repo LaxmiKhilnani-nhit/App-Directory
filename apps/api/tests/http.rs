@@ -66,7 +66,9 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["token"], json!("laxmikhilnani@nhit.co.in"));
+    let issued = body["token"].as_str().unwrap();
+    assert!(issued.contains("laxmikhilnani@nhit.co.in"), "{issued}");
+    assert!(issued.split('|').count() == 3, "{issued}");
     assert_eq!(body["mustChangePassword"], json!(false));
     assert_eq!(body["user"]["email"], json!("laxmikhilnani@nhit.co.in"));
 
@@ -94,7 +96,7 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(error["error"]["code"], json!("unknown_user"));
+    assert_eq!(error["error"]["code"], json!("invalid_credentials"));
 }
 
 #[tokio::test]
@@ -199,24 +201,24 @@ async fn csv_import_accepts_excel_bom_and_semicolons() {
 #[tokio::test]
 async fn normal_users_cannot_use_the_admin_portal() {
     let h = setup();
-    add_user(&h, "laxmikhilnani", Some("IT"), true);
+    add_user(&h, "plainuser", Some("IT"), true);
 
     let (status, error) = json(
         &h,
         "POST",
         "/api/v1/auth/login",
         None,
-        json!({ "email": "laxmikhilnani@nhit.co.in", "password": "anything" }),
+        json!({ "email": "plainuser@nhit.co.in", "password": "anything" }),
     )
     .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(error["error"]["code"], json!("invalid_credentials"));
+
+    let (status, error) = get(&h, "/api/v1/admin/me", Some("ad\\plainuser")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(error["error"]["code"], json!("admin_only"));
 
-    let (status, error) = get(&h, "/api/v1/admin/me", Some("ad\\laxmikhilnani")).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(error["error"]["code"], json!("admin_only"));
-
-    let (status, _) = get(&h, "/api/v1/admin/apps", Some("ad\\laxmikhilnani")).await;
+    let (status, _) = get(&h, "/api/v1/admin/apps", Some("ad\\plainuser")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // No identity at all must not fall back to the first imported account.
@@ -224,7 +226,7 @@ async fn normal_users_cannot_use_the_admin_portal() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // The desktop client still works for the same user.
-    let (status, _) = get(&h, "/api/v1/client/sync", Some("ad\\laxmikhilnani")).await;
+    let (status, _) = get(&h, "/api/v1/client/sync", Some("ad\\plainuser")).await;
     assert_eq!(status, StatusCode::OK);
 }
 
@@ -331,4 +333,43 @@ async fn app_crud_and_icon_round_trip() {
     assert_eq!(delete_status, StatusCode::NO_CONTENT);
     let (status, _) = get(&h, &format!("/api/v1/admin/apps/{id}"), Some(identity)).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn purge_user_archives_to_delete_agent_csv() {
+    let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
+    let identity = "ad\\admin";
+    let user_id = add_user(&h, "leaving", Some("IT"), true);
+    let app_id = add_app(&h, "Payroll", 0);
+    grant_user(&h, user_id, app_id);
+
+    let (status, _) = get(&h, &format!("/api/v1/admin/users/{user_id}"), Some(identity)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json(
+        &h,
+        "DELETE",
+        &format!("/api/v1/admin/users/{user_id}/purge"),
+        Some(identity),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Gone from the portal and from users.csv.
+    let (status, _) = get(&h, &format!("/api/v1/admin/users/{user_id}"), Some(identity)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let users_csv = std::fs::read_to_string(h.dir.join("users.csv")).unwrap();
+    assert!(!users_csv.contains("leaving@nhit.co.in"), "{users_csv}");
+
+    // Archived in delete_agent.csv with the actor and a timestamp.
+    let deleted_csv = std::fs::read_to_string(h.dir.join("delete_agent.csv")).unwrap();
+    assert!(deleted_csv.contains("leaving@nhit.co.in"), "{deleted_csv}");
+    assert!(deleted_csv.contains("admin@nhit.co.in"), "{deleted_csv}");
+    assert_eq!(deleted_csv.lines().count(), 2, "{deleted_csv}");
+
+    // Direct app grants were cleaned up.
+    let grants = std::fs::read_to_string(h.dir.join("user_apps.csv")).unwrap();
+    assert!(!grants.contains(&user_id.to_string()), "{grants}");
 }

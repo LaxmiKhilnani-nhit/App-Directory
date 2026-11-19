@@ -121,6 +121,10 @@ pub fn resolve(parts: &Parts, query_identity: Option<&str>, _state: &AppState) -
         .map(str::trim)
         .filter(|token| !token.is_empty() && *token != "csv")
     {
+        // A signed admin token wins; otherwise treat the raw value as an identity.
+        if let Some(email) = crate::domain::admins::verify_token(_state, token) {
+            return Some(email);
+        }
         return Some(token.to_string());
     }
 
