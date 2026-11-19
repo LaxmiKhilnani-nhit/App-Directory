@@ -4,6 +4,7 @@ import type { Announcement, Setting } from "@app-directory/types";
 import { adminApi } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "../components/Form";
+import { showToast } from "../components/Toast";
 import { PageHeader, Notice } from "../components/PageHeader";
 import { useAsync } from "../hooks/useAsync";
 import { formatDateTime } from "../utils/format";
@@ -70,7 +71,6 @@ export function Settings() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings.data || loaded) return;
@@ -107,7 +107,6 @@ export function Settings() {
 
   async function save() {
     setError(null);
-    setNotice(null);
 
     const values: Record<string, unknown> = {
       app_name: appName.trim(),
@@ -149,7 +148,7 @@ export function Settings() {
     try {
       const updated = await adminApi.updateSettings(values);
       settings.setData(updated);
-      setNotice("Settings saved. Clients pick the change up on their next sync.");
+      showToast("Saved");
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -175,7 +174,6 @@ export function Settings() {
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
       {settings.error ? <Notice tone="danger">{settings.error}</Notice> : null}
 
       {settings.loading && !settings.data ? (

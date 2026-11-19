@@ -41,6 +41,13 @@ pub fn setup() -> Harness {
         },
         store,
     );
+    // Admin credentials live in a separate CSV. Pre-seed the accounts the HTTP tests use.
+    let hash = app_directory_api::domain::admins::hash_password("anything");
+    let mut admins = String::from("email;name;password_hash\n");
+    for name in ["admin", "anyone", "laxmikhilnani"] {
+        admins.push_str(&format!("{}@nhit.co.in;Test Admin;{hash}\n", name));
+    }
+    let _ = fs::write(dir.join("admins.csv"), admins);
     let app = build_router(state.clone());
     Harness { dir, state, app }
 }

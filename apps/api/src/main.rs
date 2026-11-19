@@ -9,6 +9,13 @@ use app_directory_api::build_router;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("hash-password") {
+        let password = args.get(2).ok_or_else(|| anyhow::anyhow!("usage: hash-password <password>"))?;
+        println!("{}", app_directory_api::domain::admins::hash_password(password));
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| EnvFilter::new("info")),

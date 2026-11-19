@@ -6,6 +6,7 @@ import { errorMessage } from "../api/errors";
 import { PageHeader, Notice } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CheckboxField, TextField } from "../components/Form";
+import { showToast } from "../components/Toast";
 import { useAsync } from "../hooks/useAsync";
 import { formatRelative } from "../utils/format";
 
@@ -19,7 +20,6 @@ export function Departments() {
   const [confirm, setConfirm] = useState<Department | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editing) {
@@ -47,7 +47,6 @@ export function Departments() {
 
   async function save() {
     setError(null);
-    setNotice(null);
     if (!name.trim()) {
       setError("A department name is required.");
       return;
@@ -61,11 +60,7 @@ export function Departments() {
         department = await adminApi.createDepartment(name.trim());
       }
       await adminApi.setDepartmentApps(department.id, [...selectedApps]);
-      setNotice(
-        editing
-          ? "Department and app access saved."
-          : `Department created with ${selectedApps.size} app${selectedApps.size === 1 ? "" : "s"}.`,
-      );
+      showToast("Saved");
       setName("");
       setEditing(null);
       setSelectedApps(new Set());
@@ -83,7 +78,7 @@ export function Departments() {
     setError(null);
     try {
       await adminApi.deleteDepartment(confirm.id);
-      setNotice("Department removed. Its people lost the department's app grants.");
+      showToast("Department removed");
       departments.reload();
     } catch (cause) {
       setError(errorMessage(cause));
@@ -101,7 +96,6 @@ export function Departments() {
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
       {departments.error ? <Notice tone="danger">{departments.error}</Notice> : null}
 
       <section className="admin-card">

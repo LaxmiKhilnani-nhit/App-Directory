@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth";
 import { Shell } from "./components/Shell";
 import { RequireAuth, SuperAdminOnly } from "./components/RequireAuth";
+import { ToastHost } from "./components/Toast";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Apps } from "./pages/Apps";
@@ -23,6 +24,7 @@ function Super({ children }: { children: ReactNode }) {
 export function App() {
   return (
     <AuthProvider>
+      <ToastHost />
       <Routes>
         <Route path="/login" element={<Login />} />
 

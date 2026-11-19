@@ -8,39 +8,25 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer } from "./Drawer";
 import { CheckboxField, SelectField, TextField } from "./Form";
 import { Notice } from "./PageHeader";
+import { showToast } from "./Toast";
 import { useAsync } from "../hooks/useAsync";
 
 interface UserEditorProps {
   userId: string | null;
   onClose: () => void;
   onChanged: (user: AdminUser) => void;
+  onDeleted?: () => void;
 }
 
 const ROLE_LABEL: Record<Role, string> = {
   user: "User",
-  app_admin: "App admin",
   super_admin: "Super admin",
 };
 
-function parseCategories(text: string): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const raw of text.split(",")) {
-    const value = raw.trim();
-    if (!value) continue;
-    const key = value.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(value.slice(0, 80));
-  }
-  return result.slice(0, 50);
-}
-
-export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
+export function UserEditor({ userId, onClose, onChanged, onDeleted }: UserEditorProps) {
   const { user: me } = useAuth();
 
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const effectiveId = createdId ?? userId;
+  const effectiveId = userId;
 
   const detail = useAsync<UserDetail | null>(
     () => (effectiveId ? adminApi.user(effectiveId) : Promise.resolve(null)),
@@ -54,7 +40,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("");
   const [role, setRole] = useState<Role>("user");
-  const [scopeText, setScopeText] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
@@ -62,8 +47,8 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   const [tab, setTab] = useState<"profile" | "access">("profile");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmPurge, setConfirmPurge] = useState(false);
 
   useEffect(() => {
     const record = detail.data;
@@ -72,7 +57,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     setEmail(record.email);
     setDepartment(record.department ?? "");
     setRole(record.role);
-    setScopeText((record.adminScope?.categories ?? []).join(", "));
     setIsActive(record.isActive);
     setSelectedApps(new Set(detail.data?.appIds ?? []));
   }, [detail.data]);
@@ -80,12 +64,14 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   const creating = !effectiveId;
   const self = Boolean(effectiveId && me?.id === effectiveId);
 
+  function savedAndClose(message: string) {
+    showToast(message);
+    window.setTimeout(onClose, 200);
+  }
+
   async function saveProfile() {
     setBusy(true);
     setError(null);
-    setNotice(null);
-
-    const scope = role === "app_admin" ? { categories: parseCategories(scopeText) } : null;
 
     try {
       if (creating) {
@@ -94,24 +80,22 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
           name: name.trim(),
           department: department.trim() ? department.trim() : null,
           role,
-          adminScope: scope,
+          adminScope: null,
         };
         const created = await adminApi.createUser(input);
         onChanged(created);
-        setCreatedId(created.id);
-        setNotice("Account created.");
+        savedAndClose("Saved");
       } else {
         const patch: UserPatch = {
           name: name.trim(),
           department: department.trim() ? department.trim() : null,
           role,
-          adminScope: scope,
+          adminScope: null,
           isActive,
         };
         const updated = await adminApi.updateUser(effectiveId!, patch);
         onChanged(updated);
-        setNotice("Account updated.");
-        detail.reload();
+        savedAndClose("Saved");
       }
     } catch (cause) {
       setError(errorMessage(cause));
@@ -124,13 +108,10 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     if (!effectiveId) return;
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
       const updated = await adminApi.setUserApps(effectiveId, [...selectedApps]);
       onChanged(updated);
-      setSelectedApps(new Set(updated.appIds));
-      setNotice("Direct app grants saved.");
-      detail.reload();
+      savedAndClose("Saved");
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -154,6 +135,22 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     }
   }
 
+  async function purge() {
+    if (!effectiveId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await adminApi.purgeUser(effectiveId);
+      showToast("User deleted");
+      onDeleted?.();
+      window.setTimeout(onClose, 200);
+    } catch (cause) {
+      setError(errorMessage(cause));
+      setBusy(false);
+      setConfirmPurge(false);
+    }
+  }
+
   return (
     <>
       <Drawer
@@ -168,14 +165,24 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
         footer={
           <>
             {!creating ? (
-              <Button
-                variant="danger"
-                onClick={() => setConfirmDeactivate(true)}
-                disabled={busy || self || !isActive}
-                title={self ? "You cannot deactivate your own account" : undefined}
-              >
-                {isActive ? "Deactivate" : "Deactivated"}
-              </Button>
+              <div className="admin-actions">
+                <Button
+                  variant="danger"
+                  onClick={() => setConfirmPurge(true)}
+                  disabled={busy || self}
+                  title={self ? "You cannot delete your own account" : undefined}
+                >
+                  Delete user
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => setConfirmDeactivate(true)}
+                  disabled={busy || self || !isActive}
+                  title={self ? "You cannot deactivate your own account" : undefined}
+                >
+                  {isActive ? "Deactivate" : "Deactivated"}
+                </Button>
+              </div>
             ) : (
               <span />
             )}
@@ -201,8 +208,7 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
         }
       >
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
-
+  
         {!creating && detail.data ? (
           <div className="admin-chiprow">
             <Badge tone={detail.data.isActive ? "success" : "danger"}>
@@ -285,20 +291,9 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
                 hint={self ? "You cannot change your own role." : undefined}
               >
                 <option value="user">User</option>
-                <option value="app_admin">App admin</option>
                 <option value="super_admin">Super admin</option>
               </SelectField>
             </div>
-
-            {role === "app_admin" ? (
-              <TextField
-                label="Admin scope categories"
-                value={scopeText}
-                onChange={(event) => setScopeText(event.target.value)}
-                placeholder="Finance, HR"
-                hint="Comma-separated app categories. Empty scope means the admin can see no apps."
-              />
-            ) : null}
 
             {role === "super_admin" && !self ? (
               <Notice>
@@ -368,6 +363,16 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
         busy={busy}
         onCancel={() => setConfirmDeactivate(false)}
         onConfirm={deactivate}
+      />
+
+      <ConfirmDialog
+        open={confirmPurge}
+        title={`Permanently delete ${detail.data?.name ?? "this account"}?`}
+        description="This removes the account and all of its direct app grants. A copy of the record is archived in delete_agent.csv for audit. This cannot be undone from the portal."
+        confirmLabel="Delete permanently"
+        busy={busy}
+        onCancel={() => setConfirmPurge(false)}
+        onConfirm={purge}
       />
     </>
   );

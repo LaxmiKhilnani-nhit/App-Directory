@@ -15,7 +15,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::http::identity::TrustedUser;
 use crate::http::json_body;
 use crate::state::AppState;
-use crate::store::{UserAppRow, UserRow};
+use crate::store::{DeletedUserRow, UserAppRow, UserRow};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +80,7 @@ pub async fn list(
         if !validate::is_role(role) {
             return Err(ApiError::bad_request(
                 "invalid_role",
-                "Role must be user, app_admin or super_admin.",
+                "Role must be user or super_admin.",
             ));
         }
     }
@@ -223,15 +223,8 @@ pub async fn update(
             None => before.role.clone(),
         };
         let is_active = patch.is_active.unwrap_or(before.is_active);
-        let admin_scope = if role != "app_admin" {
-            None
-        } else {
-            match patch.admin_scope {
-                Some(Some(value)) => Some(validate::validate_scope(value)?),
-                Some(None) => Some(serde_json::json!({ "categories": [] })),
-                None => before.admin_scope.clone(),
-            }
-        };
+        // `app_admin` was removed; only `super_admin` remains and it has no scope.
+        let admin_scope = None;
 
         let before_view = AdminUser::from(&before);
         data.ensure_department(department.as_deref().unwrap_or_default());
@@ -293,6 +286,55 @@ pub async fn delete(
             Some(id),
             Some(serde_json::to_value(&before_view).unwrap_or_default()),
             Some(serde_json::to_value(&after_view).unwrap_or_default()),
+        );
+        Ok(())
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Permanently removes a user. The removed row is archived in `delete_agent.csv` so the
+/// action is auditable and reversible by hand, then the user's grants are cleaned up.
+pub async fn purge(
+    State(state): State<AppState>,
+    TrustedUser(actor): TrustedUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    state.store.mutate(|data| {
+        let user = data
+            .user_by_id(id)
+            .ok_or_else(|| ApiError::not_found("user_not_found", "That user no longer exists."))?
+            .clone();
+        let before_view = AdminUser::from(&user);
+
+        data.deleted_users.push(DeletedUserRow {
+            id: user.id,
+            email: user.email.clone(),
+            name: user.name.clone(),
+            department: user.department.clone(),
+            role: user.role.clone(),
+            admin_scope: user.admin_scope.clone(),
+            is_active: user.is_active,
+            must_change_password: user.must_change_password,
+            last_login_at: user.last_login_at,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            deleted_at: Utc::now(),
+            deleted_by: Some(actor.email.clone()),
+        });
+
+        data.users.retain(|row| row.id != id);
+        data.user_apps.retain(|row| row.user_id != id);
+        data.group_members.retain(|row| row.user_id != id);
+
+        data.bump_revision();
+        data.audit(
+            Some(actor.id),
+            Some(actor.email.clone()),
+            "user.purge",
+            "user",
+            Some(id),
+            Some(serde_json::to_value(&before_view).unwrap_or_default()),
+            None,
         );
         Ok(())
     })?;

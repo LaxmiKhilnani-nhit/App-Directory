@@ -144,20 +144,20 @@ pub fn validate_sort_order(sort_order: i32) -> Result<i32, ApiError> {
 }
 
 pub fn is_role(role: &str) -> bool {
-    matches!(role, "user" | "app_admin" | "super_admin")
+    matches!(role, "user" | "super_admin")
 }
 
 pub fn validate_role(role: &str) -> Result<String, ApiError> {
     if !is_role(role) {
         return Err(ApiError::bad_request(
             "invalid_role",
-            "Role must be user, app_admin or super_admin.",
+            "Role must be user or super_admin.",
         ));
     }
     Ok(role.to_string())
 }
 
-/// Normalises an `app_admin` scope to `{"categories": [...]}`.
+/// Validates a category-scope object. Retained for compatibility; no role uses scopes now.
 pub fn validate_scope(value: Value) -> Result<Value, ApiError> {
     let object = value.as_object().ok_or_else(|| {
         ApiError::bad_request(
@@ -216,14 +216,9 @@ pub fn validate_scope(value: Value) -> Result<Value, ApiError> {
     Ok(json!({ "categories": categories }))
 }
 
-pub fn scope_for(role: &str, value: Option<Value>) -> Result<Option<Value>, ApiError> {
-    if role != "app_admin" {
-        return Ok(None);
-    }
-    match value {
-        Some(value) => validate_scope(value).map(Some),
-        None => Ok(Some(json!({ "categories": [] }))),
-    }
+pub fn scope_for(_role: &str, _value: Option<Value>) -> Result<Option<Value>, ApiError> {
+    // `app_admin` was removed; only `super_admin` exists and it has no scope.
+    Ok(None)
 }
 
 /// Minimal RFC-4180 reader used by the bulk user import endpoint.

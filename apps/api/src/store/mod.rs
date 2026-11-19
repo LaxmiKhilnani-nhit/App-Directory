@@ -25,11 +25,12 @@ use uuid::Uuid;
 use crate::error::ApiError;
 
 pub use models::{
-    AppDepartmentRow, AppGroupRow, AppRow, AuditRow, Data, DepartmentRow, GroupMemberRow, GroupRow,
-    SettingRow, UserAppRow, UserRow,
+    AppDepartmentRow, AppGroupRow, AppRow, AuditRow, Data, DeletedUserRow, DepartmentRow,
+    GroupMemberRow, GroupRow, SettingRow, UserAppRow, UserRow,
 };
 
 const USERS: &str = "users.csv";
+const DELETED_USERS: &str = "delete_agent.csv";
 const DEPARTMENTS: &str = "departments.csv";
 const APP_DEPARTMENTS: &str = "app_departments.csv";
 const GROUPS: &str = "groups.csv";
@@ -41,8 +42,9 @@ const SETTINGS: &str = "settings.csv";
 const AUDIT: &str = "audit.csv";
 const REVISION: &str = "revision.csv";
 
-const FILES: [&str; 11] = [
+const FILES: [&str; 12] = [
     USERS,
+    DELETED_USERS,
     DEPARTMENTS,
     APP_DEPARTMENTS,
     GROUPS,
@@ -91,6 +93,8 @@ impl Store {
         let dir = dir.into();
         fs::create_dir_all(dir.join("icons"))
             .with_context(|| format!("creating {}", dir.join("icons").display()))?;
+        crate::domain::admins::ensure_file(&dir)
+            .with_context(|| format!("creating {}", dir.join("admins.csv").display()))?;
         for name in FILES {
             let path = dir.join(name);
             if name == REVISION {
@@ -227,6 +231,30 @@ impl Store {
             ]);
         }
         csv::write_rows(&dir.join(USERS), header_for(USERS), &users)?;
+
+        let mut deleted = Vec::new();
+        for row in &data.deleted_users {
+            deleted.push(vec![
+                models::uuid_str(row.id),
+                row.email.clone(),
+                row.name.clone(),
+                models::opt_str(row.department.clone()),
+                row.role.clone(),
+                models::json_str(row.admin_scope.as_ref()),
+                models::bool_str(row.is_active),
+                models::bool_str(row.must_change_password),
+                models::opt_dt_str(row.last_login_at),
+                models::dt_str(row.created_at),
+                models::dt_str(row.updated_at),
+                models::dt_str(row.deleted_at),
+                models::opt_str(row.deleted_by.clone()),
+            ]);
+        }
+        csv::write_rows(
+            &dir.join(DELETED_USERS),
+            header_for(DELETED_USERS),
+            &deleted,
+        )?;
 
         let mut departments = Vec::new();
         for row in &data.departments {
@@ -387,6 +415,28 @@ impl Store {
                 last_login_at: models::dt(&field(8)),
                 created_at: models::dt(&field(9)).unwrap_or_else(Utc::now),
                 updated_at: models::dt(&field(10)).unwrap_or_else(Utc::now),
+            });
+        }
+
+        for row in csv::read_rows(&dir.join(DELETED_USERS)).unwrap_or_default() {
+            let Some(id) = models::opt_uuid(row.first().map(String::as_str).unwrap_or("")) else {
+                continue;
+            };
+            let field = |index: usize| row.get(index).cloned().unwrap_or_default();
+            data.deleted_users.push(DeletedUserRow {
+                id,
+                email: field(1).to_lowercase(),
+                name: field(2),
+                department: non_empty(field(3)),
+                role: non_empty(field(4)).unwrap_or_else(|| "user".to_string()),
+                admin_scope: models::parse_json(&field(5)),
+                is_active: models::parse_bool(&field(6)),
+                must_change_password: models::parse_bool(&field(7)),
+                last_login_at: models::dt(&field(8)),
+                created_at: models::dt(&field(9)).unwrap_or_else(Utc::now),
+                updated_at: models::dt(&field(10)).unwrap_or_else(Utc::now),
+                deleted_at: models::dt(&field(11)).unwrap_or_else(Utc::now),
+                deleted_by: non_empty(field(12)),
             });
         }
 
@@ -571,6 +621,7 @@ impl Store {
 fn header_for(name: &str) -> &'static str {
     match name {
         USERS => "id,email,name,department,role,adminScope,isActive,mustChangePassword,lastLoginAt,createdAt,updatedAt",
+        DELETED_USERS => "id,email,name,department,role,adminScope,isActive,mustChangePassword,lastLoginAt,createdAt,updatedAt,deletedAt,deletedBy",
         DEPARTMENTS => "id,name,createdAt,updatedAt",
         APP_DEPARTMENTS => "appId,departmentId",
         GROUPS => "id,name,description,autoDepartment,isAllUsers,createdAt,updatedAt",

@@ -1,3 +1,4 @@
+pub mod admins;
 pub mod de;
 pub mod entitlements;
 pub mod icon;
