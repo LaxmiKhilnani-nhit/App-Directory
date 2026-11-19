@@ -1,12 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Spinner } from "@app-directory/ui";
-import type {
-  AdminApp,
-  AdminGroup,
-  AdminUser,
-  Role,
-  UserDetail,
-} from "@app-directory/types";
+import type { AdminUser, Role, UserDetail } from "@app-directory/types";
 import { adminApi, type UserInput, type UserPatch } from "../api/admin";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../auth";
@@ -54,7 +48,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   );
 
   const apps = useAsync(() => adminApi.apps(), []);
-  const groups = useAsync(() => adminApi.groups(), []);
   const departments = useAsync(() => adminApi.departments(), []);
 
   const [name, setName] = useState("");
@@ -65,7 +58,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
   const [isActive, setIsActive] = useState(true);
 
   const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
-  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const [tab, setTab] = useState<"profile" | "access">("profile");
   const [busy, setBusy] = useState(false);
@@ -83,27 +75,10 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     setScopeText((record.adminScope?.categories ?? []).join(", "));
     setIsActive(record.isActive);
     setSelectedApps(new Set(detail.data?.appIds ?? []));
-    setGroupIds(detail.data?.groupIds ?? []);
   }, [detail.data]);
 
   const creating = !effectiveId;
   const self = Boolean(effectiveId && me?.id === effectiveId);
-
-  const suggestions = useMemo(() => {
-    const appList = apps.data ?? [];
-    if (groupIds.length === 0) return [] as AdminApp[];
-    return appList.filter((app) => app.groupIds.some((id) => groupIds.includes(id)));
-  }, [apps.data, groupIds]);
-
-  const pendingSuggestions = suggestions.filter((app) => !selectedApps.has(app.id));
-
-  function applySuggestions() {
-    setSelectedApps((previous) => {
-      const next = new Set(previous);
-      for (const app of suggestions) next.add(app.id);
-      return next;
-    });
-  }
 
   async function saveProfile() {
     setBusy(true);
@@ -153,7 +128,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
     try {
       const updated = await adminApi.setUserApps(effectiveId, [...selectedApps]);
       onChanged(updated);
-      setGroupIds(updated.groupIds);
       setSelectedApps(new Set(updated.appIds));
       setNotice("Direct app grants saved.");
       detail.reload();
@@ -179,19 +153,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
       setConfirmDeactivate(false);
     }
   }
-
-  const groupName = (id: string) =>
-    groups.data?.find((group) => group.id === id)?.name ?? "Unknown group";
-
-  const groupsById = new Map<string, AdminGroup>(
-    (groups.data ?? []).map((group) => [group.id, group]),
-  );
-
-  const appSuggestionNote = (app: AdminApp): string | null => {
-    const via = app.groupIds.filter((id) => groupIds.includes(id));
-    if (via.length === 0) return null;
-    return `via ${via.map((id) => groupsById.get(id)?.name ?? groupName(id)).join(", ")}`;
-  };
 
   return (
     <>
@@ -341,7 +302,7 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
 
             {role === "super_admin" && !self ? (
               <Notice>
-                Super admins manage every account, group and setting. Grant this role sparingly.
+                Super admins manage every account and setting. Grant this role sparingly.
               </Notice>
             ) : null}
 
@@ -355,30 +316,6 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
               />
             ) : null}
 
-            {!creating ? (
-              <>
-                <hr className="admin-divider" />
-                <div className="admin-stack-sm">
-                  <h3 className="admin-section-title">Group membership</h3>
-                  {groupIds.length === 0 ? (
-                    <p className="admin-inline-hint">
-                      No manual groups include this person. Department groups apply automatically.
-                    </p>
-                  ) : (
-                    <div className="admin-chiprow">
-                      {groupIds.map((id) => (
-                        <span className="admin-chip" key={id}>
-                          {groupName(id)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="admin-inline-hint">
-                    Edit membership on the Groups screen. Direct grants below add to group access.
-                  </p>
-                </div>
-              </>
-            ) : null}
           </div>
         ) : null}
 
@@ -387,21 +324,9 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
             <div className="admin-stack-sm">
               <h3 className="admin-section-title">Direct app grants</h3>
               <p className="admin-inline-hint">
-                Ticked apps are granted to this person regardless of group membership. Group access
-                is shown underneath each app.
+                Ticked apps are granted directly to this person, in addition to any department
+                grants.
               </p>
-
-              {groups.data && groupIds.length > 0 ? (
-                <div className="admin-actions">
-                  <Button
-                    size="sm"
-                    onClick={applySuggestions}
-                    disabled={busy || pendingSuggestions.length === 0}
-                  >
-                    Apply group suggestions ({pendingSuggestions.length})
-                  </Button>
-                </div>
-              ) : null}
 
               {apps.loading && !apps.data ? <Spinner label="Loading apps…" /> : null}
 
@@ -409,29 +334,22 @@ export function UserEditor({ userId, onClose, onChanged }: UserEditorProps) {
                 {apps.data && apps.data.length === 0 ? (
                   <div className="admin-empty-inline">No apps exist yet.</div>
                 ) : null}
-                {(apps.data ?? []).map((app) => {
-                  const note = appSuggestionNote(app);
-                  return (
-                    <CheckboxField
-                      key={app.id}
-                      label={app.name}
-                      hint={
-                        note
-                          ? `${app.category ?? "Uncategorised"} · ${note}`
-                          : (app.category ?? "Uncategorised")
-                      }
-                      checked={selectedApps.has(app.id)}
-                      onChange={(checked) =>
-                        setSelectedApps((previous) => {
-                          const next = new Set(previous);
-                          if (checked) next.add(app.id);
-                          else next.delete(app.id);
-                          return next;
-                        })
-                      }
-                    />
-                  );
-                })}
+                {(apps.data ?? []).map((app) => (
+                  <CheckboxField
+                    key={app.id}
+                    label={app.name}
+                    hint={app.category ?? "Uncategorised"}
+                    checked={selectedApps.has(app.id)}
+                    onChange={(checked) =>
+                      setSelectedApps((previous) => {
+                        const next = new Set(previous);
+                        if (checked) next.add(app.id);
+                        else next.delete(app.id);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
               </div>
 
               <p className="admin-inline-hint">

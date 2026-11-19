@@ -364,7 +364,6 @@ struct CsvRow {
     name: String,
     email: String,
     department: Option<String>,
-    groups: Vec<String>,
 }
 
 fn parse_csv(text: &str) -> Result<Vec<CsvRow>, ApiError> {
@@ -408,7 +407,6 @@ fn parse_csv(text: &str) -> Result<Vec<CsvRow>, ApiError> {
         ));
     };
     let department_index = index_of_any(&["department", "dept"]);
-    let groups_index = index_of_any(&["groups", "group"]);
 
     let mut rows = Vec::new();
     for (line, raw) in lines {
@@ -424,16 +422,6 @@ fn parse_csv(text: &str) -> Result<Vec<CsvRow>, ApiError> {
             email: fields.get(email_index).cloned().unwrap_or_default(),
             name: fields.get(name_index).cloned().unwrap_or_default(),
             department: field(department_index),
-            groups: field(groups_index)
-                .map(|value| {
-                    value
-                        .split(';')
-                        .map(str::trim)
-                        .filter(|group| !group.is_empty())
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default(),
         });
     }
     Ok(rows)
@@ -448,12 +436,6 @@ pub async fn import(
     let rows = parse_csv(&request.csv)?;
 
     state.store.mutate(|data| {
-        let group_by_name: HashMap<String, Uuid> = data
-            .groups
-            .iter()
-            .map(|group| (group.name.to_lowercase(), group.id))
-            .collect();
-
         let mut report = ImportReport {
             created: 0,
             updated: 0,
@@ -516,28 +498,6 @@ pub async fn import(
                 }
             };
 
-            let mut group_ids = Vec::new();
-            let mut group_error = None;
-            for group_name in &row.groups {
-                match group_by_name.get(&group_name.to_lowercase()) {
-                    Some(id) => group_ids.push(*id),
-                    None => {
-                        group_error = Some(format!(
-                            "Unknown group \"{group_name}\"; create it first or fix the spelling."
-                        ));
-                        break;
-                    }
-                }
-            }
-            if let Some(message) = group_error {
-                report.errors.push(ImportErrorRow {
-                    line: row.line,
-                    email: Some(email),
-                    message,
-                });
-                continue;
-            }
-
             match data.user_by_email(&email).cloned() {
                 Some(existing) => {
                     if existing.name != name || existing.department != department {
@@ -554,7 +514,6 @@ pub async fn import(
                     } else {
                         report.unchanged += 1;
                     }
-                    add_memberships(data, existing.id, &group_ids);
                 }
                 None => {
                     let now = Utc::now();
@@ -573,7 +532,6 @@ pub async fn import(
                         created_at: now,
                         updated_at: now,
                     });
-                    add_memberships(data, id, &group_ids);
                     report.created += 1;
                 }
             }
@@ -598,21 +556,4 @@ pub async fn import(
         );
         Ok(Json(report))
     })
-}
-
-fn add_memberships(data: &mut crate::store::Data, user_id: Uuid, group_ids: &[Uuid]) {
-    let now = Utc::now();
-    for group_id in group_ids {
-        if !data
-            .group_members
-            .iter()
-            .any(|member| member.group_id == *group_id && member.user_id == user_id)
-        {
-            data.group_members.push(crate::store::GroupMemberRow {
-                group_id: *group_id,
-                user_id,
-                created_at: now,
-            });
-        }
-    }
 }

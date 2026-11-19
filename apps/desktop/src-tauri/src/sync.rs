@@ -98,28 +98,48 @@ fn previous_etags() -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
+/// Fetches changed icons concurrently in small batches so one slow site cannot hold up the
+/// others. The UI is already showing cached artwork by the time this runs.
 async fn refresh_icons(api: &ApiClient, apps: &[SyncApp], prior: &HashMap<String, String>) {
+    let mut pending: Vec<(String, String, Option<String>)> = Vec::new();
+
     for app in apps {
         let (Some(path), Some(etag)) = (app.icon_url.as_deref(), app.icon_etag.as_deref()) else {
             continue;
         };
-
-        let file = icons::path_for(&app.id);
         let unchanged = prior.get(&app.id).map(String::as_str) == Some(etag);
-        if unchanged && file.exists() {
+        if unchanged && icons::path_for(&app.id).exists() {
             continue;
         }
+        pending.push((
+            app.id.clone(),
+            path.to_string(),
+            prior.get(&app.id).cloned(),
+        ));
+    }
 
-        match api.icon(path, prior.get(&app.id).map(String::as_str)).await {
-            Ok(Some(bytes)) => {
-                if let Err(error) = icons::save(&file, &bytes) {
-                    tracing::warn!("icon save failed: {error}");
+    for batch in pending.chunks(6) {
+        let mut tasks = tokio::task::JoinSet::new();
+        for (app_id, path, previous_etag) in batch {
+            let client = api.clone();
+            let (app_id, path, previous_etag) =
+                (app_id.clone(), path.clone(), previous_etag.clone());
+            tasks.spawn(async move {
+                match client.icon(&path, previous_etag.as_deref()).await {
+                    Ok(Some(bytes)) => {
+                        if let Err(error) = icons::save(&icons::path_for(&app_id), &bytes) {
+                            tracing::warn!("icon save failed: {error}");
+                        }
+                    }
+                    // 304: the cached file is still correct.
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!("icon fetch failed for {app_id}: {}", error.message)
+                    }
                 }
-            }
-            // 304: the cached file is still correct even though the payload changed elsewhere.
-            Ok(None) => {}
-            Err(error) => tracing::warn!("icon fetch failed for {}: {}", app.name, error.message),
+            });
         }
+        while tasks.join_next().await.is_some() {}
     }
 
     let keep: HashSet<String> = apps

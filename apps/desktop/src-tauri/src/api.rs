@@ -105,6 +105,7 @@ struct ErrorBody {
     message: String,
 }
 
+#[derive(Clone)]
 pub struct ApiClient {
     http: reqwest::Client,
     base: String,
@@ -115,7 +116,7 @@ pub struct ApiClient {
 impl ApiClient {
     pub fn new(base: String) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(5))
             .user_agent(format!("AppDirectory/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("HTTP client");
@@ -215,7 +216,7 @@ impl ApiClient {
             request = request.header(reqwest::header::IF_NONE_MATCH, etag);
         }
 
-        let response = self.send(request, Some(Duration::from_secs(15))).await?;
+        let response = self.send(request, Some(Duration::from_secs(5))).await?;
         let status = response.status();
 
         if status == reqwest::StatusCode::NOT_MODIFIED {

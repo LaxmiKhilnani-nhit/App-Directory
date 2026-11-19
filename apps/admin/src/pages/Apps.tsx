@@ -30,7 +30,6 @@ type StatusFilter = "all" | "enabled" | "disabled";
 
 export function Apps() {
   const apps = useAsync(() => adminApi.apps(), []);
-  const groups = useAsync(() => adminApi.groups(), []);
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -83,7 +82,6 @@ export function Apps() {
       />
 
       {apps.error ? <Notice tone="danger">{apps.error}</Notice> : null}
-      {groups.error ? <Notice tone="danger">{groups.error}</Notice> : null}
 
       <section className="admin-card">
         <div className="admin-toolbar">
@@ -127,7 +125,7 @@ export function Apps() {
             description={
               apps.data && apps.data.length > 0
                 ? "Clear the search or pick a different category."
-                : "Add the first tile, then grant it to groups or individual people."
+                : "Add the first tile, then grant it to departments or individual people."
             }
           />
         ) : (
@@ -138,7 +136,6 @@ export function Apps() {
                   <th>Application</th>
                   <th>Category</th>
                   <th>Status</th>
-                  <th>Groups</th>
                   <th>People</th>
                   <th>Sort</th>
                   <th aria-label="Actions" />
@@ -166,7 +163,6 @@ export function Apps() {
                         <Badge tone="neutral">Disabled</Badge>
                       )}
                     </td>
-                    <td className="admin-nowrap">{app.groupIds.length}</td>
                     <td className="admin-nowrap">{app.userIds.length}</td>
                     <td className="admin-mono admin-muted-cell">{app.sortOrder}</td>
                     <td>
@@ -193,7 +189,6 @@ export function Apps() {
       {editor ? (
         <AppEditor
           app={editor.app}
-          groups={groups.data ?? []}
           onClose={() => setEditor(null)}
           onChanged={onChanged}
         />

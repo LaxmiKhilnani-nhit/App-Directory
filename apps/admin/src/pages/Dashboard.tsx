@@ -21,7 +21,6 @@ export function Dashboard() {
       ? [
           ["Users", `${stats.data.activeUsers}`, `${stats.data.users} total`],
           ["Apps", `${stats.data.enabledApps}`, `${stats.data.apps} total`],
-          ["Groups", `${stats.data.groups}`, "manual + automatic"],
           ["Sign-ins today", `${stats.data.loginsToday}`, "accounts seen today"],
           ["Sync revision", `${stats.data.revision}`, "bumped on every change"],
         ]
