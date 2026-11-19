@@ -233,6 +233,29 @@ impl Data {
             .find(|user| user.email.to_lowercase() == email)
     }
 
+    /// Creates a department when a CSV or form introduces a name we do not know yet.
+    /// Returns true when a row was added.
+    pub fn ensure_department(&mut self, name: &str) -> bool {
+        let name = name.trim();
+        if name.is_empty()
+            || self
+                .departments
+                .iter()
+                .any(|department| department.name.eq_ignore_ascii_case(name))
+        {
+            return false;
+        }
+
+        let now = Utc::now();
+        self.departments.push(DepartmentRow {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            created_at: now,
+            updated_at: now,
+        });
+        true
+    }
+
     pub fn department_by_id(&self, id: Uuid) -> Option<&DepartmentRow> {
         self.departments
             .iter()
