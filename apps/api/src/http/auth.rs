@@ -99,9 +99,10 @@ pub async fn login(
         Ok(())
     });
 
-    // The `Authorization` header is ignored everywhere; this token is intentionally fixed.
+    // The token carries the signed-in identity so the admin role gate can resolve the same
+    // account on every later request. It is not a secret — identity is trusted by design.
     Ok(Json(LoginResponse {
-        token: "csv".to_string(),
+        token: user.email.clone(),
         expires_at: now + Duration::days(365 * 10),
         user: session.clone(),
         must_change_password: false,

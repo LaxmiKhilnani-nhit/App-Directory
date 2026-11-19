@@ -38,10 +38,9 @@ fn percent_decode(value: &str) -> String {
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%' && index + 2 < bytes.len() {
-            if let (Some(high), Some(low)) = (
-                hex_value(bytes[index + 1]),
-                hex_value(bytes[index + 2]),
-            ) {
+            if let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+            {
                 out.push(high * 16 + low);
                 index += 3;
                 continue;
@@ -79,14 +78,18 @@ pub fn normalize(raw: &str, mail_domain: &str) -> String {
     if value.contains('@') {
         value.to_lowercase()
     } else {
-        format!("{}@{}", value.to_lowercase(), mail_domain.trim().to_lowercase())
+        format!(
+            "{}@{}",
+            value.to_lowercase(),
+            mail_domain.trim().to_lowercase()
+        )
     }
 }
 
-/// Resolves the trusted identity from the request. The bearer token is only consulted when
-/// it is not the dummy `"csv"` token, which keeps forward compatibility with clients that
-/// send an identity as the token.
-pub fn resolve(parts: &Parts, query_identity: Option<&str>, state: &AppState) -> Option<String> {
+/// Resolves the trusted identity from the request. There is deliberately no fallback to a
+/// configured or "first active" account: that would let an arbitrary imported user inherit
+/// admin access. An absent identity must be rejected.
+pub fn resolve(parts: &Parts, query_identity: Option<&str>, _state: &AppState) -> Option<String> {
     for name in IDENTITY_HEADERS {
         if let Some(raw) = parts
             .headers
@@ -99,7 +102,10 @@ pub fn resolve(parts: &Parts, query_identity: Option<&str>, state: &AppState) ->
         }
     }
 
-    if let Some(raw) = query_identity.map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(raw) = query_identity
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         return Some(raw.to_string());
     }
 
@@ -107,34 +113,18 @@ pub fn resolve(parts: &Parts, query_identity: Option<&str>, state: &AppState) ->
         .headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer ")))
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
         .map(str::trim)
         .filter(|token| !token.is_empty() && *token != "csv")
     {
         return Some(token.to_string());
     }
 
-    let data = state.store.read();
-    if let Some(configured) = data
-        .setting_str("default_identity")
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
-        return Some(configured);
-    }
-
-    // Local-development fallback: when no proxy injects an identity, use the first active
-    // account. This keeps the unmodified admin SPA (which only sends the dummy `csv`
-    // bearer token) usable on a fresh install. An explicit but unknown identity still
-    // resolves to that identity and is rejected with `unknown_user` by `KnownUser`.
-    let mut active: Vec<&str> = data
-        .users
-        .iter()
-        .filter(|user| user.is_active)
-        .map(|user| user.email.as_str())
-        .collect();
-    active.sort_unstable();
-    active.first().map(|email| (*email).to_string())
+    None
 }
 
 /// Looks up the CSV user for a raw identity string.
@@ -199,7 +189,10 @@ pub struct TrustedUser(pub SessionUser);
 impl FromRequestParts<AppState> for TrustedUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let identity = query_value(parts, "identity");
         let raw = resolve(parts, identity.as_deref(), state)
             .ok_or_else(|| ApiError::unauthorized("A Windows identity is required."))?;
@@ -213,10 +206,14 @@ pub struct KnownUser(pub SessionUser);
 impl FromRequestParts<AppState> for KnownUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let identity = query_value(parts, "identity");
-        let raw = resolve(parts, identity.as_deref(), state)
-            .ok_or_else(|| ApiError::forbidden("unknown_user", "No Windows identity was supplied."))?;
+        let raw = resolve(parts, identity.as_deref(), state).ok_or_else(|| {
+            ApiError::forbidden("unknown_user", "No Windows identity was supplied.")
+        })?;
         Ok(KnownUser(known_user(state, &raw)?))
     }
 }
