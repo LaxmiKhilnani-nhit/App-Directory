@@ -98,6 +98,35 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
 }
 
 #[tokio::test]
+async fn csv_import_creates_unknown_departments() {
+    let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
+
+    let csv = "name,email,department,groups\nNew Person,newperson@nhit.co.in,Brand New Dept,\n";
+    let (status, body) = json(
+        &h,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some("ad\\admin"),
+        json!({ "csv": csv }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (_, departments) = get(&h, "/api/v1/admin/departments", Some("ad\\admin")).await;
+    let names: Vec<&str> = departments
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["name"].as_str())
+        .collect();
+    assert!(names.contains(&"Brand New Dept"), "{names:?}");
+
+    let (_, sync) = get(&h, "/api/v1/client/sync", Some("newperson@nhit.co.in")).await;
+    assert_eq!(sync["user"]["department"], json!("Brand New Dept"));
+}
+
+#[tokio::test]
 async fn csv_import_accepts_excel_bom_and_semicolons() {
     let h = setup();
     add_admin_user(&h, "admin", "super_admin");

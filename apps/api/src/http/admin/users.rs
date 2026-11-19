@@ -177,6 +177,7 @@ pub async fn create(
                 "An account with that email already exists.",
             ));
         }
+        data.ensure_department(row.department.as_deref().unwrap_or_default());
         data.users.push(row);
         data.bump_revision();
         let view = AdminUser::from(data.user_by_id(id).expect("exists"));
@@ -233,6 +234,7 @@ pub async fn update(
         };
 
         let before_view = AdminUser::from(&before);
+        data.ensure_department(department.as_deref().unwrap_or_default());
         {
             let user = data
                 .users
@@ -539,6 +541,7 @@ pub async fn import(
             match data.user_by_email(&email).cloned() {
                 Some(existing) => {
                     if existing.name != name || existing.department != department {
+                        data.ensure_department(department.as_deref().unwrap_or_default());
                         let user = data
                             .users
                             .iter_mut()
@@ -556,6 +559,7 @@ pub async fn import(
                 None => {
                     let now = Utc::now();
                     let id = Uuid::new_v4();
+                    data.ensure_department(department.as_deref().unwrap_or_default());
                     data.users.push(UserRow {
                         id,
                         email,
