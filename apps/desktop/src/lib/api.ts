@@ -106,12 +106,9 @@ export async function cachedSnapshot(): Promise<Snapshot | null> {
   return invoke<Snapshot | null>("cached_snapshot");
 }
 
-export async function checkUpdate(): Promise<UpdateInfo> {
-  return invoke<UpdateInfo>("check_update");
-}
-
-export async function applyUpdate(): Promise<void> {
-  return invoke<void>("apply_update");
+/** Silent background download; the new exe is applied on the next launch. */
+export async function prepareUpdate(): Promise<void> {
+  return invoke<void>("prepare_update");
 }
 
 export async function openApp(url: string): Promise<void> {

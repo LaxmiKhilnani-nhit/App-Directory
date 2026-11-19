@@ -8,7 +8,6 @@ import {
   toCommandError,
 } from "../lib/api";
 import { useSearchShortcuts } from "../hooks/useSearchShortcuts";
-import { useUpdate } from "../hooks/useUpdate";
 import {
   AnnouncementBanner,
   AppGrid,
@@ -17,7 +16,6 @@ import {
   Notices,
   Section,
   TopBar,
-  UpdateBanner,
 } from "../components/DirectoryParts";
 
 export interface DirectoryProps {
@@ -94,7 +92,6 @@ export function Directory({
     if (visible.length > 0) void open(visible[0]!);
   });
 
-  const update = useUpdate(!preview, snapshot.revision);
   const offline = snapshot.source === "cache";
 
   return (
@@ -118,12 +115,6 @@ export function Directory({
           refreshError={refreshError}
           lastSyncedAt={snapshot.lastSyncedAt}
         />
-        <UpdateBanner
-          update={update.update}
-          busy={update.busy}
-          error={update.error}
-          onInstall={() => void update.install()}
-        />
         <AnnouncementBanner value={snapshot.announcement} />
         <CategoryChips categories={categories} active={category} onChange={setCategory} />
         <AppGrid apps={visible} total={apps.length} onOpen={(app) => void open(app)} onClear={clearFilters} />
@@ -136,6 +127,7 @@ export function Directory({
         total={apps.length}
         onRefresh={onRefresh}
         onChangeEmail={onChangeEmail}
+        version={core?.version ?? ""}
       />
     </div>
   );

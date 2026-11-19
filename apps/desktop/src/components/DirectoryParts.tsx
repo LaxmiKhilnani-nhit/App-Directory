@@ -199,6 +199,7 @@ export function Footer({
   total,
   onRefresh,
   onChangeEmail,
+  version,
 }: {
   refreshing: boolean;
   lastSyncedAt: string;
@@ -206,6 +207,7 @@ export function Footer({
   total: number;
   onRefresh: () => void;
   onChangeEmail: () => void;
+  version: string;
 }) {
   const count = shown === total
     ? `${total} app${total === 1 ? "" : "s"}`
@@ -220,7 +222,7 @@ export function Footer({
           `Last synced ${relativeTime(lastSyncedAt)}`
         )}
       </span>
-      <span>{count}</span>
+      <span>{count} · v{version}</span>
       <div className="desktop-footer__actions">
         <Button variant="ghost" size="sm" onClick={onChangeEmail}>
           Change email

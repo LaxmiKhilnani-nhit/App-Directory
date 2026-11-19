@@ -186,18 +186,17 @@ fn cached_snapshot() -> Result<Option<sync::SnapshotView>, CommandError> {
     Ok(stored.map(|stored| sync::view(&stored, "cache", Utc::now())))
 }
 
+/// Silently downloads a published update, if any. Applying happens on the next launch.
 #[tauri::command]
-async fn check_update(client: State<'_, Client>) -> Result<api::UpdateInfo, CommandError> {
-    client.api.update_info().await
-}
-
-#[tauri::command]
-async fn apply_update(client: State<'_, Client>) -> Result<(), CommandError> {
-    let info = client.api.update_info().await?;
-    if !info.available {
-        return Err(CommandError::new("no_update", "No update is available."));
+async fn prepare_update(client: State<'_, Client>) -> Result<(), CommandError> {
+    match updater::prepare(&client.api).await {
+        Ok(_) => Ok(()),
+        // A failed background check must never block the directory.
+        Err(error) => {
+            tracing::warn!(%error.code, %error.message, "update check failed");
+            Ok(())
+        }
     }
-    updater::install(&client.api, &info).await
 }
 
 /// Opens a tile in the default browser. Only `http`/`https` leave the client.
@@ -234,6 +233,11 @@ pub fn run() {
         }))
         .manage(client)
         .setup(|_app| {
+            // A verified update from a previous run is applied before the UI appears.
+            if let Err(error) = updater::apply_staged() {
+                tracing::warn!(%error.code, %error.message, "could not apply the staged update");
+            }
+
             let should_create =
                 !cfg!(debug_assertions) || std::env::var("APPDIR_CREATE_SHORTCUTS").is_ok();
 
@@ -258,8 +262,7 @@ pub fn run() {
             identity_state,
             sync_snapshot,
             cached_snapshot,
-            check_update,
-            apply_update,
+            prepare_update,
             open_app,
         ])
         .run(tauri::generate_context!())

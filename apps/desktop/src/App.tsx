@@ -12,6 +12,7 @@ import {
   identityState,
   identityStatus,
   isTauri,
+  prepareUpdate,
   syncSnapshot,
   toCommandError,
 } from "./lib/api";
@@ -80,6 +81,8 @@ export function App() {
       setPhase("error");
       return;
     }
+    // Silent self-update: a newer exe is downloaded now and applied on the next launch.
+    void prepareUpdate();
     setIdentityInfo(status);
     if (!status.configured) {
       setPhase("identity");

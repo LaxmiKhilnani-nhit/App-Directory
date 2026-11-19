@@ -66,7 +66,6 @@ export function Settings() {
   const [announcementTo, setAnnouncementTo] = useState("");
   const [updateEnabled, setUpdateEnabled] = useState(false);
   const [updateVersion, setUpdateVersion] = useState("");
-  const [updateSha256, setUpdateSha256] = useState("");
   const [updateUrl, setUpdateUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -98,7 +97,6 @@ export function Settings() {
 
     setUpdateEnabled(settingValue(settings.data, "update_enabled") === 1);
     setUpdateVersion(asText(settingValue(settings.data, "update_version"), ""));
-    setUpdateSha256(asText(settingValue(settings.data, "update_sha256"), ""));
     setUpdateUrl(asText(settingValue(settings.data, "update_url"), ""));
     setLoaded(true);
   }, [settings.data, loaded]);
@@ -144,7 +142,6 @@ export function Settings() {
     Object.assign(values, {
       update_enabled: updateEnabled ? 1 : 0,
       update_version: updateVersion.trim(),
-      update_sha256: updateSha256.trim(),
       update_url: updateUrl.trim(),
     });
 
@@ -251,9 +248,9 @@ export function Settings() {
               </Badge>
             </div>
             <p className="admin-inline-hint" style={{ marginTop: "var(--space-2)" }}>
-              With the flag on, clients show an "Update now" link when their version is older
-              than the published version. Place the new exe in the server's <code>release/</code>{" "}
-              folder and enter its SHA-256 checksum.
+              With the flag on, clients automatically download the published exe on launch and
+              apply it on their next start. Place the new file in the server's{" "}
+              <code>release/</code> folder — the checksum is calculated automatically.
             </p>
             <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
               <CheckboxField
@@ -277,14 +274,6 @@ export function Settings() {
                   maxLength={300}
                 />
               </div>
-              <TextField
-                label="SHA-256 checksum"
-                value={updateSha256}
-                onChange={(event) => setUpdateSha256(event.target.value)}
-                placeholder="64 hex characters"
-                maxLength={64}
-                hint="Leave empty only if you trust the download endpoint absolutely."
-              />
             </div>
           </section>
 

@@ -202,11 +202,14 @@ The client is a single portable `.exe` that installs nothing. It keeps its state
 
 ### Self-update
 
-With `update_enabled = 1` and an `update_version` in `settings.csv`, the client shows an
-**Update now** link. It downloads the exe, verifies SHA-256, moves the running exe to
-`App Directory.old.exe`, installs the new one, starts it and exits. A failed checksum leaves the
-old exe untouched. Publish by replacing `release\App Directory.exe` on the server and setting
-`update_enabled`, `update_version` and `update_sha256` in Settings.
+With `update_enabled = 1` and an `update_version` in `settings.csv`, clients **silently**
+download the published exe on launch, verify its SHA-256, and apply it on the **next launch**
+(the old exe is kept as `App Directory.old.exe`). No user action is needed and there is no
+mid-session restart. A failed download or checksum leaves the old exe untouched and is retried
+next time.
+
+The server computes the checksum from the mounted `release\App Directory.exe`, so publishing is
+just: replace that file, then set `update_enabled` and `update_version` in Settings.
 
 ## Known risk
 
