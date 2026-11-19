@@ -162,7 +162,10 @@ The server also accepts a `DOMAIN\user` identity and normalises it to `<user>@<m
 
 The admin portal keeps its sign-in page, but it is for administrators only: `super_admin` and
 `app_admin` accounts can log in, while a plain `user` account gets a 403 from `login` and every
-`/admin/*` endpoint. The token is a formality; the desktop client does not sign in at all.
+`/admin/*` endpoint. The login token carries the signed-in email so the role check resolves the
+same account on every request — there is deliberately **no fallback** to a configured or
+"first active" user, which would let an imported account inherit admin rights. The desktop
+client does not sign in at all.
 
 **The username is trusted as supplied.** Anyone on the LAN can claim another user's name and see
 their apps. This was accepted deliberately to keep the client sign-in-free. Do not expose port

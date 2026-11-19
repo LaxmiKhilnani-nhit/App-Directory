@@ -66,7 +66,7 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["token"], json!("csv"));
+    assert_eq!(body["token"], json!("laxmikhilnani@nhit.co.in"));
     assert_eq!(body["mustChangePassword"], json!(false));
     assert_eq!(body["user"]["email"], json!("laxmikhilnani@nhit.co.in"));
 
@@ -95,6 +95,56 @@ async fn login_uses_trusted_identity_and_requires_a_known_user() {
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(error["error"]["code"], json!("unknown_user"));
+}
+
+#[tokio::test]
+async fn csv_import_cannot_grant_admin_roles() {
+    let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
+
+    let csv =
+        "name,email,department,groups,role\nFake Admin,fakeadmin@nhit.co.in,IT,,super_admin\n";
+    let (status, body) = json(
+        &h,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some("ad\\admin"),
+        json!({ "csv": csv }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (_, page) = get(
+        &h,
+        "/api/v1/admin/users?query=fakeadmin&limit=1",
+        Some("ad\\admin"),
+    )
+    .await;
+    assert_eq!(page["users"][0]["role"], json!("user"));
+
+    // Importing must not change an existing administrator either.
+    let csv = "name,email,department,groups,role\nRenamed Admin,admin@nhit.co.in,IT,,user\n";
+    let (_, _) = json(
+        &h,
+        "POST",
+        "/api/v1/admin/users/import",
+        Some("ad\\admin"),
+        json!({ "csv": csv }),
+    )
+    .await;
+    let (_, page) = get(
+        &h,
+        "/api/v1/admin/users?query=admin&limit=20",
+        Some("ad\\admin"),
+    )
+    .await;
+    let admins: Vec<&serde_json::Value> = page["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|user| user["email"] == json!("admin@nhit.co.in"))
+        .collect();
+    assert_eq!(admins[0]["role"], json!("super_admin"));
 }
 
 #[tokio::test]
@@ -167,6 +217,10 @@ async fn normal_users_cannot_use_the_admin_portal() {
     assert_eq!(error["error"]["code"], json!("admin_only"));
 
     let (status, _) = get(&h, "/api/v1/admin/apps", Some("ad\\laxmikhilnani")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // No identity at all must not fall back to the first imported account.
+    let (status, _) = get(&h, "/api/v1/admin/apps", None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // The desktop client still works for the same user.

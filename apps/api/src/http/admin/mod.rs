@@ -109,7 +109,7 @@ pub fn router(state: AppState) -> Router<AppState> {
 
 async fn me(TrustedUser(user): TrustedUser) -> Json<AdminMe> {
     Json(AdminMe {
-        is_super_admin: true,
+        is_super_admin: user.role == "super_admin",
         user,
     })
 }
