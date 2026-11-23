@@ -68,6 +68,14 @@ export interface UpdateStatus {
   error: string | null;
 }
 
+export interface UpdateProgress {
+  downloaded: number;
+  total: number;
+  percent: number;
+}
+
+export const UPDATE_PROGRESS_EVENT = "update-progress";
+
 export const EMPTY_UPDATE_STATUS: UpdateStatus = {
   available: false,
   version: "",

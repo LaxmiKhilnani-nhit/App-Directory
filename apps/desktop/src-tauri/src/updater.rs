@@ -15,12 +15,14 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tauri::{AppHandle, Emitter};
 
 use crate::api::{ApiClient, CommandError, UpdateInfo};
 use crate::config;
 
 const STAGED_NAME: &str = "App Directory.exe";
 const HASH_NAME: &str = "sha256.txt";
+const PROGRESS_EVENT: &str = "update-progress";
 
 /// What the last update check found. Serialised with camelCase for the Tauri bridge.
 #[derive(Debug, Clone, Serialize)]
@@ -46,6 +48,30 @@ impl Default for UpdateStatus {
             staged: false,
             checking: false,
             error: None,
+        }
+    }
+}
+
+/// Download progress pushed to the UI over the `update-progress` Tauri event.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProgress {
+    pub downloaded: u64,
+    pub total: u64,
+    pub percent: u32,
+}
+
+impl UpdateProgress {
+    fn new(downloaded: u64, total: u64) -> Self {
+        let percent = if total > 0 {
+            ((downloaded as f64 / total as f64) * 100.0).round().min(100.0) as u32
+        } else {
+            0
+        };
+        Self {
+            downloaded,
+            total,
+            percent,
         }
     }
 }
@@ -102,7 +128,7 @@ pub fn staged_ready() -> bool {
 
 /// Runs an update check and returns a status describing the outcome. Never fails: an unreachable
 /// server or a bad download is reported in `error` so the UI can explain it to the user.
-pub async fn check(api: &ApiClient) -> UpdateStatus {
+pub async fn check(api: &ApiClient, app: &AppHandle) -> UpdateStatus {
     let info = match api.update_info().await {
         Ok(info) => info,
         Err(error) => {
@@ -123,7 +149,7 @@ pub async fn check(api: &ApiClient) -> UpdateStatus {
         };
     }
 
-    match stage(api, &info).await {
+    match stage(api, &info, app).await {
         Ok(()) => UpdateStatus {
             available: true,
             version,
@@ -141,7 +167,7 @@ pub async fn check(api: &ApiClient) -> UpdateStatus {
 
 /// Downloads and verifies an available update. Safe to call repeatedly: a verified staged file
 /// is left in place and downloaded again only if it is missing or corrupted.
-async fn stage(api: &ApiClient, info: &UpdateInfo) -> Result<(), CommandError> {
+async fn stage(api: &ApiClient, info: &UpdateInfo, app: &AppHandle) -> Result<(), CommandError> {
     if info.sha256.trim().is_empty() {
         return Err(CommandError::new(
             "invalid_update",
@@ -164,7 +190,15 @@ async fn stage(api: &ApiClient, info: &UpdateInfo) -> Result<(), CommandError> {
         }
     }
 
-    let bytes = api.download(&info.url).await?;
+    let bytes = api
+        .download_with_progress(&info.url, |downloaded, total| {
+            let _ = app.emit(PROGRESS_EVENT, UpdateProgress::new(downloaded, total));
+        })
+        .await?;
+    let _ = app.emit(
+        PROGRESS_EVENT,
+        UpdateProgress::new(bytes.len() as u64, bytes.len() as u64),
+    );
     if bytes.len() < 1024 {
         return Err(CommandError::new(
             "invalid_update",
