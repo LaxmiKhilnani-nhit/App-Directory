@@ -60,6 +60,22 @@ export interface UpdateInfo {
   url: string;
 }
 
+export interface UpdateStatus {
+  available: boolean;
+  version: string;
+  staged: boolean;
+  checking: boolean;
+  error: string | null;
+}
+
+export const EMPTY_UPDATE_STATUS: UpdateStatus = {
+  available: false,
+  version: "",
+  staged: false,
+  checking: false,
+  error: null,
+};
+
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -107,8 +123,18 @@ export async function cachedSnapshot(): Promise<Snapshot | null> {
 }
 
 /** Silent background download; the new exe is applied on the next launch. */
-export async function prepareUpdate(): Promise<void> {
-  return invoke<void>("prepare_update");
+export async function prepareUpdate(): Promise<UpdateStatus> {
+  return invoke<UpdateStatus>("prepare_update");
+}
+
+/** Current status of the silent self-update check. */
+export async function updateStatus(): Promise<UpdateStatus> {
+  return invoke<UpdateStatus>("update_status");
+}
+
+/** Re-run the update check, for example when the user refreshes. */
+export async function checkForUpdate(): Promise<UpdateStatus> {
+  return invoke<UpdateStatus>("check_for_update");
 }
 
 export async function openApp(url: string): Promise<void> {

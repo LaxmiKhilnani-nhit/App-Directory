@@ -6,7 +6,10 @@ import {
   type IdentityState,
   type IdentityStatus,
   type Snapshot,
+  type UpdateStatus,
+  EMPTY_UPDATE_STATUS,
   cachedSnapshot,
+  checkForUpdate,
   clearIdentity,
   coreInfo,
   identityState,
@@ -36,6 +39,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus>(EMPTY_UPDATE_STATUS);
   const booted = useRef(false);
 
   const loadDirectory = useCallback(
@@ -82,7 +86,9 @@ export function App() {
       return;
     }
     // Silent self-update: a newer exe is downloaded now and applied on the next launch.
-    void prepareUpdate();
+    void prepareUpdate()
+      .then(setUpdate)
+      .catch(() => setUpdate({ ...EMPTY_UPDATE_STATUS, error: "Update check failed" }));
     setIdentityInfo(status);
     if (!status.configured) {
       setPhase("identity");
@@ -151,6 +157,7 @@ export function App() {
       }
     } finally {
       setRefreshing(false);
+      checkForUpdate().then(setUpdate).catch(() => undefined);
     }
   }, []);
 
@@ -235,6 +242,8 @@ export function App() {
       onRefresh={() => void refresh(true)}
       onOpenError={(message) => setRefreshError(message)}
       onChangeEmail={() => void changeEmail()}
+      update={update}
+      apiBaseUrl={core?.apiBaseUrl ?? ""}
     />
   );
 }

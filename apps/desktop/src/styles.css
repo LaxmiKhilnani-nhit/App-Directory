@@ -397,6 +397,18 @@
   gap: 6px;
 }
 
+.desktop-update-status {
+  color: var(--color-accent);
+  font-weight: 600;
+  margin-left: var(--space-2);
+}
+
+.desktop-server {
+  color: var(--color-text-subtle);
+  margin-left: var(--space-2);
+  white-space: nowrap;
+}
+
 .desktop-footer__actions {
   display: flex;
   align-items: center;

@@ -1,8 +1,10 @@
 //! Silent self-update for the portable exe.
 //!
-//! On launch the client checks the server's flag and, if the published version is newer,
-//! downloads and verifies the new exe into `%LOCALAPPDATA%\AppDirectory\updates\`. The next
-//! launch swaps it in before the UI opens. Nothing is installed and no click is required.
+//! On launch (and on manual refresh) the client checks the server's flag and, if the published
+//! version is newer, downloads and verifies the new exe into `%LOCALAPPDATA%\AppDirectory\updates\`.
+//! The next launch swaps it in before the UI opens. Nothing is installed and no click is required.
+//! The result is returned as a structured status so the UI can show what happened instead of
+//! silently swallowing failures.
 
 use std::fs;
 use std::os::windows::process::CommandExt;
@@ -11,6 +13,7 @@ use std::process::Command;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::api::{ApiClient, CommandError, UpdateInfo};
@@ -18,6 +21,34 @@ use crate::config;
 
 const STAGED_NAME: &str = "App Directory.exe";
 const HASH_NAME: &str = "sha256.txt";
+
+/// What the last update check found. Serialised with camelCase for the Tauri bridge.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateStatus {
+    /// The server published a version newer than the running one.
+    pub available: bool,
+    /// The published version (may be set even when the check failed).
+    pub version: String,
+    /// A verified update is waiting to be applied on the next launch.
+    pub staged: bool,
+    /// A check is currently in flight (used by the UI while awaiting the command).
+    pub checking: bool,
+    /// Human-readable reason the check failed, if it did.
+    pub error: Option<String>,
+}
+
+impl Default for UpdateStatus {
+    fn default() -> Self {
+        Self {
+            available: false,
+            version: String::new(),
+            staged: false,
+            checking: false,
+            error: None,
+        }
+    }
+}
 
 fn hash_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -61,14 +92,56 @@ pub fn is_newer(published: &str, current: &str) -> bool {
     false
 }
 
-/// Downloads and verifies an available update. Safe to call on every launch: a verified
-/// staged file is left in place and downloaded again only if it is missing or corrupted.
-pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
-    let info = api.update_info().await?;
-    if !info.available || !is_newer(&info.version, env!("CARGO_PKG_VERSION")) {
-        return Ok(false);
+/// True when a complete, checksum-verified update is waiting on disk.
+pub fn staged_ready() -> bool {
+    let (Ok(bytes), Ok(stored)) = (fs::read(staged_path()), fs::read_to_string(hash_path())) else {
+        return false;
+    };
+    !stored.trim().is_empty() && hash_hex(&bytes) == stored.trim().to_lowercase()
+}
+
+/// Runs an update check and returns a status describing the outcome. Never fails: an unreachable
+/// server or a bad download is reported in `error` so the UI can explain it to the user.
+pub async fn check(api: &ApiClient) -> UpdateStatus {
+    let info = match api.update_info().await {
+        Ok(info) => info,
+        Err(error) => {
+            return UpdateStatus {
+                error: Some(error.message),
+                ..Default::default()
+            }
+        }
+    };
+
+    let version = info.version.clone();
+    let available = info.available && is_newer(&version, env!("CARGO_PKG_VERSION"));
+    if !available {
+        return UpdateStatus {
+            version,
+            staged: staged_ready(),
+            ..Default::default()
+        };
     }
 
+    match stage(api, &info).await {
+        Ok(()) => UpdateStatus {
+            available: true,
+            version,
+            staged: staged_ready(),
+            ..Default::default()
+        },
+        Err(error) => UpdateStatus {
+            available: true,
+            version,
+            error: Some(error.message),
+            ..Default::default()
+        },
+    }
+}
+
+/// Downloads and verifies an available update. Safe to call repeatedly: a verified staged file
+/// is left in place and downloaded again only if it is missing or corrupted.
+async fn stage(api: &ApiClient, info: &UpdateInfo) -> Result<(), CommandError> {
     if info.sha256.trim().is_empty() {
         return Err(CommandError::new(
             "invalid_update",
@@ -87,7 +160,7 @@ pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
     if let (Ok(bytes), Ok(stored_hash)) = (fs::read(staged_path()), fs::read_to_string(hash_path()))
     {
         if stored_hash.trim().eq_ignore_ascii_case(&expected) && hash_hex(&bytes) == expected {
-            return Ok(true);
+            return Ok(());
         }
     }
 
@@ -124,7 +197,7 @@ pub async fn prepare(api: &ApiClient) -> Result<bool, CommandError> {
         )
     })?;
 
-    Ok(true)
+    Ok(())
 }
 
 /// Called at startup, before the UI opens. Replaces the running exe with a verified staged
