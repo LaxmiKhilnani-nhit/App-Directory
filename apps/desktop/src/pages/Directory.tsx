@@ -11,7 +11,7 @@ import { useSearchShortcuts } from "../hooks/useSearchShortcuts";
 import {
   AnnouncementBanner,
   AppGrid,
-  CategoryChips,
+  AppsHeader,
   Footer,
   Notices,
   Section,
@@ -43,7 +43,6 @@ export function Directory({
   onChangeEmail,
 }: DirectoryProps) {
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const apps = useMemo(
@@ -54,23 +53,15 @@ export function Directory({
     [snapshot.apps],
   );
 
-  const categories = useMemo(
-    () => Array.from(new Set(apps.map((app) => app.category).filter(Boolean) as string[])).sort(),
-    [apps],
-  );
-
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return apps.filter((app) => {
-      const matchesCategory = !category || app.category === category;
-      const matchesQuery =
-        !needle ||
+    if (!needle) return apps;
+    return apps.filter(
+      (app) =>
         app.name.toLowerCase().includes(needle) ||
-        (app.description ?? "").toLowerCase().includes(needle) ||
-        (app.category ?? "").toLowerCase().includes(needle);
-      return matchesCategory && matchesQuery;
-    });
-  }, [apps, query, category]);
+        (app.description ?? "").toLowerCase().includes(needle),
+    );
+  }, [apps, query]);
 
   const open = useCallback(
     async (app: AppTile) => {
@@ -85,7 +76,6 @@ export function Directory({
 
   const clearFilters = useCallback(() => {
     setQuery("");
-    setCategory(null);
   }, []);
 
   useSearchShortcuts(searchRef, query, clearFilters, () => {
@@ -99,9 +89,6 @@ export function Directory({
       <TopBar
         core={core}
         title="App Directory"
-        search={query}
-        onQueryChange={setQuery}
-        searchRef={searchRef}
         offline={offline}
         refreshing={refreshing}
         name={snapshot.user.name || identity?.shortName || "Windows account"}
@@ -116,7 +103,7 @@ export function Directory({
           lastSyncedAt={snapshot.lastSyncedAt}
         />
         <AnnouncementBanner value={snapshot.announcement} />
-        <CategoryChips categories={categories} active={category} onChange={setCategory} />
+        <AppsHeader search={query} onQueryChange={setQuery} searchRef={searchRef} />
         <AppGrid apps={visible} total={apps.length} onOpen={(app) => void open(app)} onClear={clearFilters} />
       </Section>
 

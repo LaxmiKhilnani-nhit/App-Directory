@@ -7,9 +7,6 @@ import { relativeTime } from "../lib/time";
 export function TopBar({
   core,
   title,
-  search,
-  onQueryChange,
-  searchRef,
   offline,
   refreshing,
   name,
@@ -17,9 +14,6 @@ export function TopBar({
 }: {
   core: CoreInfo | null;
   title: string;
-  search: string;
-  onQueryChange: (value: string) => void;
-  searchRef: RefObject<HTMLInputElement | null>;
   offline: boolean;
   refreshing: boolean;
   name: string;
@@ -32,16 +26,6 @@ export function TopBar({
           <span /><span /><span /><span />
         </div>
         <span className="desktop-brand__name">{core?.appName ?? title}</span>
-      </div>
-
-      <div className="desktop-topbar__search">
-        <SearchInput
-          ref={searchRef}
-          value={search}
-          onValueChange={onQueryChange}
-          placeholder="Search apps — Ctrl+F"
-          aria-label="Search applications"
-        />
       </div>
 
       <div className="desktop-topbar__actions">
@@ -128,32 +112,31 @@ export function AnnouncementBanner({ value }: { value: Announcement | null }) {
   );
 }
 
-export function CategoryChips({
-  categories,
-  active,
-  onChange,
+export function AppsHeader({
+  search,
+  onQueryChange,
+  searchRef,
 }: {
-  categories: string[];
-  active: string | null;
-  onChange: (value: string | null) => void;
+  search: string;
+  onQueryChange: (value: string) => void;
+  searchRef: RefObject<HTMLInputElement | null>;
 }) {
-  if (categories.length < 2) return null;
   return (
-    <div className="desktop-chips">
-      <button type="button" className="desktop-chip" aria-pressed={active === null} onClick={() => onChange(null)}>
-        All
-      </button>
-      {categories.map((name) => (
-        <button
-          key={name}
-          type="button"
-          className="desktop-chip"
-          aria-pressed={active === name}
-          onClick={() => onChange(name)}
-        >
-          {name}
-        </button>
-      ))}
+    <div className="desktop-apps-header">
+      <div className="desktop-tabs" role="tablist" aria-label="Directory sections">
+        <span className="desktop-tab desktop-tab--active" role="tab" aria-selected="true">
+          Apps
+        </span>
+      </div>
+      <div className="desktop-apps-search">
+        <SearchInput
+          ref={searchRef}
+          value={search}
+          onValueChange={onQueryChange}
+          placeholder="Search apps — Ctrl+F"
+          aria-label="Search applications"
+        />
+      </div>
     </div>
   );
 }
@@ -176,7 +159,7 @@ export function AppGrid({
         description={
           total === 0
             ? "Your applications will appear here once IT assigns them. Contact IT if you expected to see something."
-            : "Try a different search term or category."
+            : "Try a different search term."
         }
         action={total === 0 ? null : <Button variant="secondary" size="sm" onClick={onClear}>Clear filters</Button>}
       />
