@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use api::{ApiClient, CommandError};
 use config as client_config;
@@ -190,16 +190,28 @@ fn cached_snapshot() -> Result<Option<sync::SnapshotView>, CommandError> {
 /// Silently downloads a published update, if any. Applying happens on the next launch.
 /// The outcome is returned and cached so the UI can explain failures instead of hiding them.
 #[tauri::command]
-async fn prepare_update(client: State<'_, Client>) -> Result<UpdateStatus, CommandError> {
+async fn prepare_update(
+    client: State<'_, Client>,
+    app: AppHandle,
+) -> Result<UpdateStatus, CommandError> {
     // The outcome is always Ok; failures are carried inside UpdateStatus.error so the UI can
     // explain them. Tauri requires Result for async commands that borrow State.
-    Ok(remember_update(&client, updater::check(&client.api).await))
+    Ok(remember_update(
+        &client,
+        updater::check(&client.api, &app).await,
+    ))
 }
 
 /// Re-runs the update check, used by the manual Refresh now action.
 #[tauri::command]
-async fn check_for_update(client: State<'_, Client>) -> Result<UpdateStatus, CommandError> {
-    Ok(remember_update(&client, updater::check(&client.api).await))
+async fn check_for_update(
+    client: State<'_, Client>,
+    app: AppHandle,
+) -> Result<UpdateStatus, CommandError> {
+    Ok(remember_update(
+        &client,
+        updater::check(&client.api, &app).await,
+    ))
 }
 
 /// Returns the last update-check outcome without making a network request.

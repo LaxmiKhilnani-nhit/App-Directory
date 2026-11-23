@@ -1,7 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import type { Announcement, AppTile } from "@app-directory/types";
 import { Button, EmptyState, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import type { CoreInfo, UpdateInfo, UpdateStatus } from "../lib/api";
+import type { CoreInfo, UpdateInfo, UpdateProgress, UpdateStatus } from "../lib/api";
 import { relativeTime } from "../lib/time";
 
 export function TopBar({
@@ -184,7 +184,7 @@ export function Footer({
   onChangeEmail,
   version,
   update,
-  apiBaseUrl,
+  progress,
 }: {
   refreshing: boolean;
   lastSyncedAt: string;
@@ -194,7 +194,7 @@ export function Footer({
   onChangeEmail: () => void;
   version: string;
   update: UpdateStatus;
-  apiBaseUrl: string;
+  progress: UpdateProgress | null;
 }) {
   const count = shown === total
     ? `${total} app${total === 1 ? "" : "s"}`
@@ -217,6 +217,17 @@ export function Footer({
         ) : (
           `Last synced ${relativeTime(lastSyncedAt)}`
         )}
+        {progress ? (
+          <span className="desktop-update-progress" title="Downloading update">
+            <span className="desktop-update-progress__track">
+              <span
+                className="desktop-update-progress__fill"
+                style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }}
+              />
+            </span>
+            <span className="desktop-update-progress__label">Updating {progress.percent}%</span>
+          </span>
+        ) : null}
         {updateLabel ? (
           <span className="desktop-update-status" title={update.error ?? undefined}>
             {updateLabel}
@@ -225,7 +236,6 @@ export function Footer({
       </span>
       <span>
         {count} · v{version}
-        <span className="desktop-server" title="Server">{apiBaseUrl}</span>
       </span>
       <div className="desktop-footer__actions">
         <Button variant="ghost" size="sm" onClick={onChangeEmail}>

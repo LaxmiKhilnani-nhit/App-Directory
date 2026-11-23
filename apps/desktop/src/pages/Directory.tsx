@@ -4,6 +4,7 @@ import {
   type CoreInfo,
   type IdentityState,
   type Snapshot,
+  type UpdateProgress,
   type UpdateStatus,
   openTile,
   toCommandError,
@@ -31,7 +32,7 @@ export interface DirectoryProps {
   onOpenError: (message: string) => void;
   onChangeEmail: () => void;
   update: UpdateStatus;
-  apiBaseUrl: string;
+  progress: UpdateProgress | null;
 }
 
 export function Directory({
@@ -45,7 +46,7 @@ export function Directory({
   onOpenError,
   onChangeEmail,
   update,
-  apiBaseUrl,
+  progress,
 }: DirectoryProps) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -121,7 +122,7 @@ export function Directory({
         onChangeEmail={onChangeEmail}
         version={core?.version ?? ""}
         update={update}
-        apiBaseUrl={apiBaseUrl}
+        progress={progress}
       />
     </div>
   );

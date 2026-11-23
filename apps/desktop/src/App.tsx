@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Button, Spinner } from "@app-directory/ui";
 import {
   type CommandError,
@@ -6,7 +7,9 @@ import {
   type IdentityState,
   type IdentityStatus,
   type Snapshot,
+  type UpdateProgress,
   type UpdateStatus,
+  UPDATE_PROGRESS_EVENT,
   EMPTY_UPDATE_STATUS,
   cachedSnapshot,
   checkForUpdate,
@@ -40,6 +43,7 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>(EMPTY_UPDATE_STATUS);
+  const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const booted = useRef(false);
 
   const loadDirectory = useCallback(
@@ -87,8 +91,14 @@ export function App() {
     }
     // Silent self-update: a newer exe is downloaded now and applied on the next launch.
     void prepareUpdate()
-      .then(setUpdate)
-      .catch(() => setUpdate({ ...EMPTY_UPDATE_STATUS, error: "Update check failed" }));
+      .then((status) => {
+        setUpdate(status);
+        setProgress(null);
+      })
+      .catch(() => {
+        setUpdate({ ...EMPTY_UPDATE_STATUS, error: "Update check failed" });
+        setProgress(null);
+      });
     setIdentityInfo(status);
     if (!status.configured) {
       setPhase("identity");
@@ -136,6 +146,15 @@ export function App() {
   }, [loadDirectory]);
 
   useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<UpdateProgress>(UPDATE_PROGRESS_EVENT, (event) => setProgress(event.payload))
+      .then((fn) => { unlisten = fn; })
+      .catch(() => undefined);
+    return () => { unlisten?.(); };
+  }, []);
+
+  useEffect(() => {
     if (booted.current) return;
     booted.current = true;
     void boot();
@@ -157,7 +176,12 @@ export function App() {
       }
     } finally {
       setRefreshing(false);
-      checkForUpdate().then(setUpdate).catch(() => undefined);
+      checkForUpdate()
+        .then((status) => {
+          setUpdate(status);
+          setProgress(null);
+        })
+        .catch(() => setProgress(null));
     }
   }, []);
 
@@ -243,7 +267,7 @@ export function App() {
       onOpenError={(message) => setRefreshError(message)}
       onChangeEmail={() => void changeEmail()}
       update={update}
-      apiBaseUrl={core?.apiBaseUrl ?? ""}
+      progress={progress}
     />
   );
 }

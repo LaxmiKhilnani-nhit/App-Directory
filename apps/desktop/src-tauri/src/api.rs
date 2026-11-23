@@ -254,14 +254,22 @@ impl ApiClient {
             .map_err(|error| CommandError::new("invalid_response", error.to_string()))
     }
 
-    pub async fn download(&self, url: &str) -> Result<Vec<u8>, CommandError> {
+    /// Downloads a URL, reporting cumulative bytes through `on_progress(downloaded, total)`.
+    pub async fn download_with_progress<F>(
+        &self,
+        url: &str,
+        on_progress: F,
+    ) -> Result<Vec<u8>, CommandError>
+    where
+        F: Fn(u64, u64),
+    {
         let target = if url.starts_with("http://") || url.starts_with("https://") {
             url.to_string()
         } else {
             self.url(url)
         };
 
-        let response = self
+        let mut response = self
             .send(self.http.get(&target), Some(Duration::from_secs(120)))
             .await?;
         let status = response.status();
@@ -272,10 +280,13 @@ impl ApiClient {
             ));
         }
 
-        Ok(response
-            .bytes()
-            .await
-            .map_err(CommandError::network)?
-            .to_vec())
+        let total = response.content_length().unwrap_or(0);
+        let mut bytes = Vec::with_capacity(total.min(16 * 1024 * 1024) as usize);
+        on_progress(0, total);
+        while let Some(chunk) = response.chunk().await.map_err(CommandError::network)? {
+            bytes.extend_from_slice(&chunk);
+            on_progress(bytes.len() as u64, total);
+        }
+        Ok(bytes)
     }
 }
