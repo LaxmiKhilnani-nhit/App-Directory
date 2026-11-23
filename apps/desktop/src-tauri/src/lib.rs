@@ -18,11 +18,21 @@ use tauri::{Manager, State};
 use api::{ApiClient, CommandError};
 use config as client_config;
 use identity as user_identity;
+use updater::UpdateStatus;
 
 /// Shared per-process state. The manual refresh budget stays at one per minute.
 struct Client {
     api: ApiClient,
     last_manual_sync: Mutex<Option<Instant>>,
+    /// Last update-check outcome, so the footer can show it without re-checking.
+    update: Mutex<UpdateStatus>,
+}
+
+fn remember_update(client: &Client, status: UpdateStatus) -> UpdateStatus {
+    if let Ok(mut stored) = client.update.lock() {
+        *stored = status.clone();
+    }
+    status
 }
 
 #[derive(Serialize)]
@@ -178,16 +188,28 @@ fn cached_snapshot() -> Result<Option<sync::SnapshotView>, CommandError> {
 }
 
 /// Silently downloads a published update, if any. Applying happens on the next launch.
+/// The outcome is returned and cached so the UI can explain failures instead of hiding them.
 #[tauri::command]
-async fn prepare_update(client: State<'_, Client>) -> Result<(), CommandError> {
-    match updater::prepare(&client.api).await {
-        Ok(_) => Ok(()),
-        // A failed background check must never block the directory.
-        Err(error) => {
-            tracing::warn!(%error.code, %error.message, "update check failed");
-            Ok(())
-        }
-    }
+async fn prepare_update(client: State<'_, Client>) -> Result<UpdateStatus, CommandError> {
+    // The outcome is always Ok; failures are carried inside UpdateStatus.error so the UI can
+    // explain them. Tauri requires Result for async commands that borrow State.
+    Ok(remember_update(&client, updater::check(&client.api).await))
+}
+
+/// Re-runs the update check, used by the manual Refresh now action.
+#[tauri::command]
+async fn check_for_update(client: State<'_, Client>) -> Result<UpdateStatus, CommandError> {
+    Ok(remember_update(&client, updater::check(&client.api).await))
+}
+
+/// Returns the last update-check outcome without making a network request.
+#[tauri::command]
+fn update_status(client: State<'_, Client>) -> UpdateStatus {
+    client
+        .update
+        .lock()
+        .map(|status| status.clone())
+        .unwrap_or_default()
 }
 
 /// Opens a tile in the default browser. Only `http`/`https` leave the client.
@@ -212,6 +234,7 @@ pub fn run() {
     let client = Client {
         api: ApiClient::new(config::api_base_url()),
         last_manual_sync: Mutex::new(None),
+        update: Mutex::new(UpdateStatus::default()),
     };
 
     tauri::Builder::default()
@@ -254,6 +277,8 @@ pub fn run() {
             sync_snapshot,
             cached_snapshot,
             prepare_update,
+            check_for_update,
+            update_status,
             open_app,
         ])
         .run(tauri::generate_context!())
