@@ -10,6 +10,7 @@ import {
   toCommandError,
 } from "../lib/api";
 import { useSearchShortcuts } from "../hooks/useSearchShortcuts";
+import { PhoneDirectory } from "../components/PhoneDirectory";
 import {
   AnnouncementBanner,
   AppGrid,
@@ -24,6 +25,8 @@ export interface DirectoryProps {
   core: CoreInfo | null;
   snapshot: Snapshot;
   identity: IdentityState | null;
+  view: "apps" | "phone";
+  onViewChange: (view: "apps" | "phone") => void;
   /** Browser preview: sample data, no core attached. */
   preview: boolean;
   refreshing: boolean;
@@ -39,6 +42,8 @@ export function Directory({
   core,
   snapshot,
   identity,
+  view,
+  onViewChange,
   preview,
   refreshing,
   refreshError,
@@ -99,6 +104,8 @@ export function Directory({
         refreshing={refreshing}
         name={snapshot.user.name || identity?.shortName || "Windows account"}
         meta={snapshot.user.department ?? identity?.identity ?? null}
+        view={view}
+        onViewChange={onViewChange}
       />
 
       <Section>
@@ -109,8 +116,14 @@ export function Directory({
           lastSyncedAt={snapshot.lastSyncedAt}
         />
         <AnnouncementBanner value={snapshot.announcement} />
-        <AppsHeader search={query} onQueryChange={setQuery} searchRef={searchRef} />
-        <AppGrid apps={visible} total={apps.length} onOpen={(app) => void open(app)} onClear={clearFilters} />
+        {view === "phone" ? (
+          <PhoneDirectory entries={snapshot.phoneDirectory} />
+        ) : (
+          <>
+            <AppsHeader search={query} onQueryChange={setQuery} searchRef={searchRef} />
+            <AppGrid apps={visible} total={apps.length} onOpen={(app) => void open(app)} onClear={clearFilters} />
+          </>
+        )}
       </Section>
 
       <Footer

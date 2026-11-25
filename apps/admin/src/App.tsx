@@ -9,6 +9,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Apps } from "./pages/Apps";
 import { Departments } from "./pages/Departments";
 import { Users } from "./pages/Users";
+import { PhoneDirectory } from "./pages/PhoneDirectory";
 import { Import } from "./pages/Import";
 import { Settings } from "./pages/Settings";
 import { Audit } from "./pages/Audit";
@@ -40,6 +41,7 @@ export function App() {
           <Route path="/apps" element={<Apps />} />
           <Route path="/departments" element={<Super><Departments /></Super>} />
           <Route path="/users" element={<Super><Users /></Super>} />
+          <Route path="/phone-directory" element={<Super><PhoneDirectory /></Super>} />
           <Route path="/import" element={<Super><Import /></Super>} />
           <Route path="/settings" element={<Super><Settings /></Super>} />
           <Route path="/audit" element={<Super><Audit /></Super>} />

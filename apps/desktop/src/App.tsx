@@ -44,6 +44,7 @@ export function App() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>(EMPTY_UPDATE_STATUS);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
+  const [view, setView] = useState<"apps" | "phone">("apps");
   const booted = useRef(false);
 
   const loadDirectory = useCallback(
@@ -260,6 +261,8 @@ export function App() {
       core={core}
       snapshot={snapshot ?? demoSnapshot()}
       identity={identity}
+      view={view}
+      onViewChange={setView}
       preview={!isTauri()}
       refreshing={refreshing}
       refreshError={refreshError}

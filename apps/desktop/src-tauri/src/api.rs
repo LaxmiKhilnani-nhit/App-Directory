@@ -37,6 +37,16 @@ pub struct SyncApp {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PhoneEntry {
+    pub id: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub phone_no: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncPayload {
     pub revision: i64,
     pub server_time: DateTime<Utc>,
@@ -46,6 +56,9 @@ pub struct SyncPayload {
     pub announcement: Option<serde_json::Value>,
     pub user: SyncUser,
     pub apps: Vec<SyncApp>,
+    /// Missing in snapshots cached before the phone directory existed.
+    #[serde(default)]
+    pub phone_directory: Vec<PhoneEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

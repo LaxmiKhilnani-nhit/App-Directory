@@ -59,6 +59,23 @@ export interface AuditQuery {
   offset?: number;
 }
 
+export interface PhoneEntry {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNo: string;
+}
+
+export interface PhoneImportReport {
+  created: number;
+  updated: number;
+  errors: { row: number; message: string }[];
+}
+
+export type PhoneEntryInput = Omit<PhoneEntry, "id">;
+export type PhoneEntryPatch = Partial<PhoneEntryInput>;
+
 function queryString(params: Record<string, string | number | boolean | undefined | null>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -148,6 +165,25 @@ export const adminApi = {
     }),
   importUsers: (csv: string) =>
     request<ImportReport>("/api/v1/admin/users/import", {
+      method: "POST",
+      body: JSON.stringify({ csv }),
+    }),
+
+  phoneDirectory: () => request<PhoneEntry[]>("/api/v1/admin/phone-directory"),
+  createPhoneEntry: (input: PhoneEntryInput) =>
+    request<PhoneEntry>("/api/v1/admin/phone-directory", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updatePhoneEntry: (id: string, patch: PhoneEntryPatch) =>
+    request<PhoneEntry>(`/api/v1/admin/phone-directory/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deletePhoneEntry: (id: string) =>
+    request<void>(`/api/v1/admin/phone-directory/${id}`, { method: "DELETE" }),
+  importPhoneDirectory: (csv: string) =>
+    request<PhoneImportReport>("/api/v1/admin/phone-directory/import", {
       method: "POST",
       body: JSON.stringify({ csv }),
     }),

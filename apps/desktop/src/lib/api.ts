@@ -39,6 +39,14 @@ export interface SnapshotUser {
   department: string | null;
 }
 
+export interface PhoneEntry {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNo: string;
+}
+
 export interface Snapshot {
   revision: number;
   serverTime: string;
@@ -48,6 +56,7 @@ export interface Snapshot {
   announcement: Announcement | null;
   user: SnapshotUser;
   apps: AppTile[];
+  phoneDirectory: PhoneEntry[];
   lastSyncedAt: string;
   source: "server" | "cache";
   expired: boolean;

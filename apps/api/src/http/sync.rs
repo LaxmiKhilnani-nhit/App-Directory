@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::domain::entitlements;
-use crate::domain::models::{SyncApp, SyncPayload, SyncUser};
+use crate::domain::models::{PhoneEntry, SyncApp, SyncPayload, SyncUser};
 use crate::error::ApiResult;
 use crate::http::identity::KnownUser;
 use crate::state::AppState;
@@ -33,6 +33,9 @@ pub async fn sync(
         .filter(|value| !value.is_null())
         .cloned()
         .and_then(active_announcement);
+
+    // The directory is shared by everybody: it contains no per-user entitlements.
+    let phone_directory = PhoneEntry::sorted_from(&data);
 
     let apps = entitlements::apps_for_user(&data, user.id)
         .into_iter()
@@ -69,6 +72,7 @@ pub async fn sync(
             must_change_password: false,
         },
         apps,
+        phone_directory,
     }))
 }
 
