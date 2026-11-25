@@ -20,8 +20,8 @@ export function TopBar({
   refreshing: boolean;
   name: string;
   meta: string | null;
-  view: "apps" | "phone" | "local";
-  onViewChange: (view: "apps" | "phone" | "local") => void;
+  view: "apps" | "local";
+  onViewChange: (view: "apps" | "local") => void;
   localApps: LocalApp[];
 }) {
   return (
@@ -34,13 +34,6 @@ export function TopBar({
       </div>
 
       <div className="desktop-topbar__actions">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => onViewChange(view === "phone" ? "apps" : "phone")}
-        >
-          {view === "phone" ? "Back to Apps" : "Phone Directory"}
-        </Button>
         <Button
           variant="secondary"
           size="sm"

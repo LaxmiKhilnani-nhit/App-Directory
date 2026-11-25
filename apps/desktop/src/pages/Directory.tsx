@@ -11,7 +11,6 @@ import {
   toCommandError,
 } from "../lib/api";
 import { useSearchShortcuts } from "../hooks/useSearchShortcuts";
-import { PhoneDirectory } from "../components/PhoneDirectory";
 import { LocalApps } from "../components/LocalApps";
 import {
   AnnouncementBanner,
@@ -27,8 +26,8 @@ export interface DirectoryProps {
   core: CoreInfo | null;
   snapshot: Snapshot;
   identity: IdentityState | null;
-  view: "apps" | "phone" | "local";
-  onViewChange: (view: "apps" | "phone" | "local") => void;
+  view: "apps" | "local";
+  onViewChange: (view: "apps" | "local") => void;
   localApps: LocalApp[];
   /** Browser preview: sample data, no core attached. */
   preview: boolean;
@@ -123,8 +122,6 @@ export function Directory({
         <AnnouncementBanner value={snapshot.announcement} />
         {view === "local" ? (
           <LocalApps apps={localApps} />
-        ) : view === "phone" ? (
-          <PhoneDirectory entries={snapshot.phoneDirectory} />
         ) : (
           <>
             <AppsHeader search={query} onQueryChange={setQuery} searchRef={searchRef} />

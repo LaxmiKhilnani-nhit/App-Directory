@@ -85,17 +85,6 @@ pub struct UserRow {
 }
 
 #[derive(Debug, Clone)]
-pub struct PhoneDirectoryRow {
-    pub id: Uuid,
-    pub first_name: String,
-    pub last_name: String,
-    pub email: String,
-    pub phone_no: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
 pub struct DeletedUserRow {
     pub id: Uuid,
     pub email: String,
@@ -205,7 +194,6 @@ pub struct AuditRow {
 #[derive(Debug, Default)]
 pub struct Data {
     pub users: Vec<UserRow>,
-    pub phone_directory: Vec<PhoneDirectoryRow>,
     pub deleted_users: Vec<DeletedUserRow>,
     pub departments: Vec<DepartmentRow>,
     pub app_departments: Vec<AppDepartmentRow>,
