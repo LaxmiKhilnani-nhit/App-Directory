@@ -36,6 +36,10 @@ pub struct SnapshotView {
     pub announcement: Option<serde_json::Value>,
     pub user: SyncUser,
     pub apps: Vec<AppView>,
+    #[serde(default = "crate::api::local_apps_enabled_default")]
+    pub local_apps_enabled: bool,
+    #[serde(default)]
+    pub local_apps_show_system: bool,
     pub last_synced_at: DateTime<Utc>,
     /// `server` when it just came off the wire, `cache` when read from disk.
     pub source: &'static str,
@@ -77,6 +81,8 @@ pub fn view(
         announcement: stored.payload.announcement.clone(),
         user: stored.payload.user.clone(),
         apps: stored.payload.apps.iter().map(view_of).collect(),
+        local_apps_enabled: stored.payload.local_apps_enabled,
+        local_apps_show_system: stored.payload.local_apps_show_system,
         last_synced_at: stored.last_synced_at,
         source,
         expired: stored.is_expired(now),

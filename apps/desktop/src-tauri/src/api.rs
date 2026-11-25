@@ -46,6 +46,14 @@ pub struct SyncPayload {
     pub announcement: Option<serde_json::Value>,
     pub user: SyncUser,
     pub apps: Vec<SyncApp>,
+    #[serde(default = "local_apps_enabled_default")]
+    pub local_apps_enabled: bool,
+    #[serde(default)]
+    pub local_apps_show_system: bool,
+}
+
+pub(crate) fn local_apps_enabled_default() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]

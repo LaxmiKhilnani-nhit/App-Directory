@@ -5,7 +5,7 @@ import { type LocalApp, openLocalApp, toCommandError } from "../lib/api";
 const ERROR_FEEDBACK_MS = 4000;
 
 /** Applications discovered on this machine. Kept intentionally lightweight. */
-export function LocalApps({ apps }: { apps: LocalApp[] }) {
+export function LocalApps({ apps, showSystem }: { apps: LocalApp[]; showSystem: boolean }) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const timeoutRef = useRef<number | null>(null);
@@ -17,11 +17,16 @@ export function LocalApps({ apps }: { apps: LocalApp[] }) {
     [],
   );
 
+  const available = useMemo(
+    () => (showSystem ? apps : apps.filter((app) => !app.isSystem)),
+    [apps, showSystem],
+  );
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return apps;
-    return apps.filter((app) => app.name.toLowerCase().includes(needle));
-  }, [apps, query]);
+    if (!needle) return available;
+    return available.filter((app) => app.name.toLowerCase().includes(needle));
+  }, [available, query]);
 
   const open = (app: LocalApp) => {
     void openLocalApp(app.path).catch((failure) => {
@@ -45,11 +50,15 @@ export function LocalApps({ apps }: { apps: LocalApp[] }) {
         />
       </div>
 
+      {!showSystem ? (
+        <p className="desktop-local-note">System tools are hidden by your administrator.</p>
+      ) : null}
+
       {error ? (
         <div className="desktop-banner desktop-banner--error" role="alert">{error}</div>
       ) : null}
 
-      {apps.length === 0 ? (
+      {available.length === 0 ? (
         <EmptyState title="No local apps found" />
       ) : visible.length === 0 ? (
         <EmptyState

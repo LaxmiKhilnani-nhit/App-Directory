@@ -202,6 +202,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (snapshot?.localAppsEnabled === false) setView("apps");
+  }, [snapshot?.localAppsEnabled]);
+
+  useEffect(() => {
     if (phase !== "directory" || !isTauri()) return;
     const hours = Math.max(1, snapshot?.syncIntervalHours ?? 4);
     const timer = window.setInterval(() => void refresh(false), hours * 60 * 60 * 1000);

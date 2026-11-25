@@ -26,6 +26,8 @@ export function demoSnapshot(): Snapshot {
       name: "Preview User",
       department: "Finance",
     },
+    localAppsEnabled: true,
+    localAppsShowSystem: false,
     apps: [
       {
         id: "demo-1",

@@ -192,6 +192,12 @@
   max-width: none;
 }
 
+.desktop-local-note {
+  margin: calc(var(--space-3) * -1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .desktop-local-tile {
   display: flex;
   align-items: center;

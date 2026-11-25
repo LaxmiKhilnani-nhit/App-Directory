@@ -145,6 +145,8 @@ fn validate(key: &str, value: &Value) -> Result<Value, ApiError> {
         "mail_domain" => require_string(value, key, 253),
         "default_identity" => optional_string(value, key, 253),
         "update_enabled" => require_flag(value, key),
+        "local_apps_enabled" => require_flag(value, key),
+        "local_apps_show_system" => require_flag(value, key),
         "update_version" => optional_string(value, key, 120),
         "update_sha256" => optional_string(value, key, 128),
         "update_url" => optional_string(value, key, 500),

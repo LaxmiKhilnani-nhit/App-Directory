@@ -28,6 +28,8 @@ pub async fn sync(
 
     let snapshot_days = data.setting_i64("offline_grace_days", 7).max(0);
     let sync_interval_hours = data.setting_i64("sync_interval_hours", 4);
+    let local_apps_enabled = data.setting_i64("local_apps_enabled", 1) == 1;
+    let local_apps_show_system = data.setting_i64("local_apps_show_system", 0) == 1;
     let announcement = data
         .setting("announcement")
         .filter(|value| !value.is_null())
@@ -62,6 +64,8 @@ pub async fn sync(
         offline_valid_until: now + Duration::days(snapshot_days),
         snapshot_days,
         sync_interval_hours,
+        local_apps_enabled,
+        local_apps_show_system,
         announcement,
         user: SyncUser {
             name: user.name,
