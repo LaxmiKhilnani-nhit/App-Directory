@@ -4,6 +4,7 @@ mod config;
 mod credentials;
 mod icons;
 mod identity;
+mod local_apps;
 mod shortcuts;
 mod sync;
 mod updater;
@@ -187,6 +188,26 @@ fn cached_snapshot() -> Result<Option<sync::SnapshotView>, CommandError> {
     Ok(stored.map(|stored| sync::view(&stored, "cache", Utc::now())))
 }
 
+/// Cached list of apps discovered on this machine.
+#[tauri::command]
+fn list_local_apps() -> Vec<local_apps::LocalApp> {
+    local_apps::load_cache()
+}
+
+/// Rescans Start Menu folders and returns the fresh list.
+#[tauri::command]
+fn refresh_local_apps() -> Vec<local_apps::LocalApp> {
+    let apps = local_apps::scan();
+    let _ = local_apps::save_cache(&apps);
+    apps
+}
+
+/// Launches a discovered local application.
+#[tauri::command]
+fn open_local_app(path: String) -> Result<(), CommandError> {
+    local_apps::open(&path)
+}
+
 /// Silently downloads a published update, if any. Applying happens on the next launch.
 /// The outcome is returned and cached so the UI can explain failures instead of hiding them.
 #[tauri::command]
@@ -292,6 +313,9 @@ pub fn run() {
             check_for_update,
             update_status,
             open_app,
+            list_local_apps,
+            refresh_local_apps,
+            open_local_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running App Directory");

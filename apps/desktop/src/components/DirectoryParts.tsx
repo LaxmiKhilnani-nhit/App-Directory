@@ -1,7 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import type { Announcement, AppTile } from "@app-directory/types";
 import { Button, EmptyState, SearchInput, Spinner, Tile } from "@app-directory/ui";
-import type { CoreInfo, UpdateInfo, UpdateProgress, UpdateStatus } from "../lib/api";
+import type { CoreInfo, LocalApp, UpdateInfo, UpdateProgress, UpdateStatus } from "../lib/api";
 import { relativeTime } from "../lib/time";
 
 export function TopBar({
@@ -20,8 +20,9 @@ export function TopBar({
   refreshing: boolean;
   name: string;
   meta: string | null;
-  view: "apps" | "phone";
-  onViewChange: (view: "apps" | "phone") => void;
+  view: "apps" | "phone" | "local";
+  onViewChange: (view: "apps" | "phone" | "local") => void;
+  localApps: LocalApp[];
 }) {
   return (
     <header className="desktop-topbar">
@@ -39,6 +40,13 @@ export function TopBar({
           onClick={() => onViewChange(view === "phone" ? "apps" : "phone")}
         >
           {view === "phone" ? "Back to Apps" : "Phone Directory"}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onViewChange(view === "local" ? "apps" : "local")}
+        >
+          {view === "local" ? "Back to Apps" : "Local Apps"}
         </Button>
         <span className="desktop-sync" title={offline ? "Working from the saved snapshot" : "Connected"}>
           <span className={`desktop-dot${offline ? " desktop-dot--offline" : ""}`} />

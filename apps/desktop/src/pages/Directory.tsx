@@ -3,6 +3,7 @@ import type { AppTile } from "@app-directory/types";
 import {
   type CoreInfo,
   type IdentityState,
+  type LocalApp,
   type Snapshot,
   type UpdateProgress,
   type UpdateStatus,
@@ -11,6 +12,7 @@ import {
 } from "../lib/api";
 import { useSearchShortcuts } from "../hooks/useSearchShortcuts";
 import { PhoneDirectory } from "../components/PhoneDirectory";
+import { LocalApps } from "../components/LocalApps";
 import {
   AnnouncementBanner,
   AppGrid,
@@ -25,8 +27,9 @@ export interface DirectoryProps {
   core: CoreInfo | null;
   snapshot: Snapshot;
   identity: IdentityState | null;
-  view: "apps" | "phone";
-  onViewChange: (view: "apps" | "phone") => void;
+  view: "apps" | "phone" | "local";
+  onViewChange: (view: "apps" | "phone" | "local") => void;
+  localApps: LocalApp[];
   /** Browser preview: sample data, no core attached. */
   preview: boolean;
   refreshing: boolean;
@@ -44,6 +47,7 @@ export function Directory({
   identity,
   view,
   onViewChange,
+  localApps,
   preview,
   refreshing,
   refreshError,
@@ -106,6 +110,7 @@ export function Directory({
         meta={snapshot.user.department ?? identity?.identity ?? null}
         view={view}
         onViewChange={onViewChange}
+        localApps={localApps}
       />
 
       <Section>
@@ -116,7 +121,9 @@ export function Directory({
           lastSyncedAt={snapshot.lastSyncedAt}
         />
         <AnnouncementBanner value={snapshot.announcement} />
-        {view === "phone" ? (
+        {view === "local" ? (
+          <LocalApps apps={localApps} />
+        ) : view === "phone" ? (
           <PhoneDirectory entries={snapshot.phoneDirectory} />
         ) : (
           <>
