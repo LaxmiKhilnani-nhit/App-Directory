@@ -11,6 +11,8 @@ export function TopBar({
   refreshing,
   name,
   meta,
+  view,
+  onViewChange,
 }: {
   core: CoreInfo | null;
   title: string;
@@ -18,6 +20,8 @@ export function TopBar({
   refreshing: boolean;
   name: string;
   meta: string | null;
+  view: "apps" | "phone";
+  onViewChange: (view: "apps" | "phone") => void;
 }) {
   return (
     <header className="desktop-topbar">
@@ -29,6 +33,13 @@ export function TopBar({
       </div>
 
       <div className="desktop-topbar__actions">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onViewChange(view === "phone" ? "apps" : "phone")}
+        >
+          {view === "phone" ? "Back to Apps" : "Phone Directory"}
+        </Button>
         <span className="desktop-sync" title={offline ? "Working from the saved snapshot" : "Connected"}>
           <span className={`desktop-dot${offline ? " desktop-dot--offline" : ""}`} />
           {refreshing ? "Syncing…" : offline ? "Offline" : "Synced"}

@@ -746,6 +746,17 @@
   gap: var(--space-2);
 }
 
+/* Phone directory */
+.admin-phone-table td {
+  white-space: nowrap;
+}
+
+.admin-phone-errors {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+}
+
 /* ---------- Responsive layout ---------- */
 
 .admin-topbar {

@@ -2,6 +2,7 @@ pub mod apps;
 pub mod audit;
 pub mod departments;
 pub mod groups;
+pub mod phone_directory;
 pub mod settings;
 pub mod stats;
 pub mod users;
@@ -93,6 +94,18 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route(
             "/api/v1/admin/groups/{id}/members",
             put(groups::set_members),
+        )
+        .route(
+            "/api/v1/admin/phone-directory",
+            get(phone_directory::list).post(phone_directory::create),
+        )
+        .route(
+            "/api/v1/admin/phone-directory/import",
+            post(phone_directory::import),
+        )
+        .route(
+            "/api/v1/admin/phone-directory/{id}",
+            axum::routing::patch(phone_directory::update).delete(phone_directory::delete),
         )
         .route("/api/v1/admin/users", get(users::list).post(users::create))
         .route("/api/v1/admin/users/import", post(users::import))

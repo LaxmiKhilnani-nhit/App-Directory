@@ -177,6 +177,7 @@ mod tests {
                     department: None,
                 },
                 apps: Vec::new(),
+                phone_directory: Vec::new(),
             },
         }
     }

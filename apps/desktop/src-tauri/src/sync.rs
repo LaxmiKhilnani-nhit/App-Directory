@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::api::{ApiClient, CommandError, SyncApp, SyncPayload, SyncUser};
+use crate::api::{ApiClient, CommandError, PhoneEntry, SyncApp, SyncPayload, SyncUser};
 use crate::{cache, config, icons};
 
 /// Mirrors `AppTile` in `packages/types`, with `iconUrl` already turned into a data URL.
@@ -36,6 +36,8 @@ pub struct SnapshotView {
     pub announcement: Option<serde_json::Value>,
     pub user: SyncUser,
     pub apps: Vec<AppView>,
+    #[serde(default)]
+    pub phone_directory: Vec<PhoneEntry>,
     pub last_synced_at: DateTime<Utc>,
     /// `server` when it just came off the wire, `cache` when read from disk.
     pub source: &'static str,
@@ -77,6 +79,7 @@ pub fn view(
         announcement: stored.payload.announcement.clone(),
         user: stored.payload.user.clone(),
         apps: stored.payload.apps.iter().map(view_of).collect(),
+        phone_directory: stored.payload.phone_directory.clone(),
         last_synced_at: stored.last_synced_at,
         source,
         expired: stored.is_expired(now),

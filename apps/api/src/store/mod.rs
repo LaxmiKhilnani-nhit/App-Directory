@@ -26,10 +26,11 @@ use crate::error::ApiError;
 
 pub use models::{
     AppDepartmentRow, AppGroupRow, AppRow, AuditRow, Data, DeletedUserRow, DepartmentRow,
-    GroupMemberRow, GroupRow, SettingRow, UserAppRow, UserRow,
+    GroupMemberRow, GroupRow, PhoneDirectoryRow, SettingRow, UserAppRow, UserRow,
 };
 
 const USERS: &str = "users.csv";
+const PHONE_DIRECTORY: &str = "phone_directory.csv";
 const DELETED_USERS: &str = "delete_agent.csv";
 const DEPARTMENTS: &str = "departments.csv";
 const APP_DEPARTMENTS: &str = "app_departments.csv";
@@ -42,8 +43,9 @@ const SETTINGS: &str = "settings.csv";
 const AUDIT: &str = "audit.csv";
 const REVISION: &str = "revision.csv";
 
-const FILES: [&str; 12] = [
+const FILES: [&str; 13] = [
     USERS,
+    PHONE_DIRECTORY,
     DELETED_USERS,
     DEPARTMENTS,
     APP_DEPARTMENTS,
@@ -80,6 +82,30 @@ pub fn default_settings() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// Builds the first-run phone directory from the checked-in seed file. The seed has no ids,
+/// so every row receives a fresh UUID when it is imported into the CSV data store.
+fn seed_phone_directory() -> Vec<PhoneDirectoryRow> {
+    const SEED: &str = include_str!("../../../../infra/seed/phone_directory.csv");
+    let now = Utc::now();
+    SEED.lines()
+        .skip(1)
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let fields = csv::split_line(line);
+            let field = |index: usize| fields.get(index).cloned().unwrap_or_default();
+            PhoneDirectoryRow {
+                id: Uuid::new_v4(),
+                first_name: field(0),
+                last_name: field(1),
+                email: field(2),
+                phone_no: field(3),
+                created_at: now,
+                updated_at: now,
+            }
+        })
+        .collect()
+}
+
 pub struct Store {
     dir: PathBuf,
     data: RwLock<Data>,
@@ -108,6 +134,12 @@ impl Store {
 
         let signatures = Self::signatures(&dir);
         let mut data = Self::load_from(&dir, signatures)?;
+
+        // Seed the phone directory on first start only. A file that already has rows is
+        // never replaced: admins are free to edit or extend it by hand afterwards.
+        if data.phone_directory.is_empty() {
+            data.phone_directory = seed_phone_directory();
+        }
 
         // Persist seeded defaults and the All Users group on first start, so every CSV file
         // is immediately hand-editable (an empty settings.csv with only a header is useless).
@@ -231,6 +263,24 @@ impl Store {
             ]);
         }
         csv::write_rows(&dir.join(USERS), header_for(USERS), &users)?;
+
+        let mut phone_directory = Vec::new();
+        for row in &data.phone_directory {
+            phone_directory.push(vec![
+                models::uuid_str(row.id),
+                row.first_name.clone(),
+                row.last_name.clone(),
+                row.email.clone(),
+                row.phone_no.clone(),
+                models::dt_str(row.created_at),
+                models::dt_str(row.updated_at),
+            ]);
+        }
+        csv::write_rows(
+            &dir.join(PHONE_DIRECTORY),
+            header_for(PHONE_DIRECTORY),
+            &phone_directory,
+        )?;
 
         let mut deleted = Vec::new();
         for row in &data.deleted_users {
@@ -415,6 +465,22 @@ impl Store {
                 last_login_at: models::dt(&field(8)),
                 created_at: models::dt(&field(9)).unwrap_or_else(Utc::now),
                 updated_at: models::dt(&field(10)).unwrap_or_else(Utc::now),
+            });
+        }
+
+        for row in csv::read_rows(&dir.join(PHONE_DIRECTORY)).unwrap_or_default() {
+            let Some(id) = models::opt_uuid(row.first().map(String::as_str).unwrap_or("")) else {
+                continue;
+            };
+            let field = |index: usize| row.get(index).cloned().unwrap_or_default();
+            data.phone_directory.push(PhoneDirectoryRow {
+                id,
+                first_name: field(1),
+                last_name: field(2),
+                email: field(3),
+                phone_no: field(4),
+                created_at: models::dt(&field(5)).unwrap_or_else(Utc::now),
+                updated_at: models::dt(&field(6)).unwrap_or_else(Utc::now),
             });
         }
 
@@ -621,6 +687,7 @@ impl Store {
 fn header_for(name: &str) -> &'static str {
     match name {
         USERS => "id,email,name,department,role,adminScope,isActive,mustChangePassword,lastLoginAt,createdAt,updatedAt",
+        PHONE_DIRECTORY => "id,firstName,lastName,email,phoneNo,createdAt,updatedAt",
         DELETED_USERS => "id,email,name,department,role,adminScope,isActive,mustChangePassword,lastLoginAt,createdAt,updatedAt,deletedAt,deletedBy",
         DEPARTMENTS => "id,name,createdAt,updatedAt",
         APP_DEPARTMENTS => "appId,departmentId",
