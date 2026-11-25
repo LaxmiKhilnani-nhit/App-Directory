@@ -6,6 +6,7 @@ import {
   type CoreInfo,
   type IdentityState,
   type IdentityStatus,
+  type LocalApp,
   type Snapshot,
   type UpdateProgress,
   type UpdateStatus,
@@ -18,7 +19,9 @@ import {
   identityState,
   identityStatus,
   isTauri,
+  listLocalApps,
   prepareUpdate,
+  refreshLocalApps,
   syncSnapshot,
   toCommandError,
 } from "./lib/api";
@@ -44,7 +47,8 @@ export function App() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>(EMPTY_UPDATE_STATUS);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
-  const [view, setView] = useState<"apps" | "phone">("apps");
+  const [view, setView] = useState<"apps" | "phone" | "local">("apps");
+  const [localApps, setLocalApps] = useState<LocalApp[]>([]);
   const booted = useRef(false);
 
   const loadDirectory = useCallback(
@@ -116,6 +120,14 @@ export function App() {
     }
     setIdentity(state);
 
+    // Local apps never block rendering: show the cached list, then rescan quietly in the background.
+    void listLocalApps()
+      .then(setLocalApps)
+      .catch(() => undefined);
+    void refreshLocalApps()
+      .then(setLocalApps)
+      .catch(() => undefined);
+
     // Show the encrypted snapshot immediately, before any network call. The live sync below
     // replaces it when it returns; if the server is down the user still has their apps.
     const cached = await cachedSnapshot().catch(() => null);
@@ -183,6 +195,9 @@ export function App() {
           setProgress(null);
         })
         .catch(() => setProgress(null));
+      refreshLocalApps()
+        .then(setLocalApps)
+        .catch(() => undefined);
     }
   }, []);
 
@@ -263,6 +278,7 @@ export function App() {
       identity={identity}
       view={view}
       onViewChange={setView}
+      localApps={localApps}
       preview={!isTauri()}
       refreshing={refreshing}
       refreshError={refreshError}

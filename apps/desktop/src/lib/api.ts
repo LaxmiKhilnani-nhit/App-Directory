@@ -47,6 +47,12 @@ export interface PhoneEntry {
   phoneNo: string;
 }
 
+export interface LocalApp {
+  id: string;
+  name: string;
+  path: string;
+}
+
 export interface Snapshot {
   revision: number;
   serverTime: string;
@@ -156,6 +162,21 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 export async function openApp(url: string): Promise<void> {
   return invoke<void>("open_app", { url });
+}
+
+/** Cached list of applications discovered on this machine. */
+export async function listLocalApps(): Promise<LocalApp[]> {
+  return invoke<LocalApp[]>("list_local_apps");
+}
+
+/** Rescan this machine for installed applications and return the fresh list. */
+export async function refreshLocalApps(): Promise<LocalApp[]> {
+  return invoke<LocalApp[]>("refresh_local_apps");
+}
+
+/** Launch a discovered application by its path. */
+export async function openLocalApp(path: string): Promise<void> {
+  return invoke<void>("open_local_app", { path });
 }
 
 /** Opens a tile in the default browser, with a `window.open` fallback for browser previews. */
