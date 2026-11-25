@@ -98,7 +98,7 @@ export function PhoneDirectory({ entries }: { entries: PhoneEntry[] }) {
               <th scope="col">First Name</th>
               <th scope="col">Last Name</th>
               <th scope="col">Email</th>
-              <th scope="col">Phone No</th>
+              <th scope="col">Extension</th>
             </tr>
           </thead>
           <tbody>
@@ -113,7 +113,7 @@ export function PhoneDirectory({ entries }: { entries: PhoneEntry[] }) {
                     <button
                       type="button"
                       className="desktop-phone-copy"
-                      title="Copy phone number"
+                      title="Copy extension"
                       onClick={() => copy(entry)}
                     >
                       {phone || "—"}

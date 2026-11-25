@@ -65,7 +65,7 @@ function PhoneEntryDrawer({ entry, onClose, onSaved }: PhoneEntryDrawerProps) {
   return (
     <Drawer
       title={entry ? "Edit entry" : "Add entry"}
-      subtitle="Name, email and phone number for the directory."
+      subtitle="Name, email and extension for the directory."
       onClose={onClose}
       footer={
         <div className="admin-actions">
@@ -107,7 +107,7 @@ function PhoneEntryDrawer({ entry, onClose, onSaved }: PhoneEntryDrawerProps) {
             required
           />
           <TextField
-            label="Phone No"
+            label="Extension"
             value={phoneNo}
             onChange={(event) => setPhoneNo(event.target.value)}
             maxLength={60}
@@ -168,7 +168,7 @@ function ImportDrawer({ onClose, onImported }: ImportDrawerProps) {
 
         <div className="admin-stack-sm">
           <p className="admin-inline-hint">
-            Columns: <code>First Name, Last Name, Email Address, Phone No</code>. The header row is
+            Columns: <code>First Name, Last Name, Email Address, Extension</code>. The header row is
             optional; rows with errors are skipped.
           </p>
           <TextAreaField
@@ -178,7 +178,7 @@ function ImportDrawer({ onClose, onImported }: ImportDrawerProps) {
             rows={16}
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder={"First Name\tLast Name\tEmail Address\tPhone No\nAsha\tSharma\tasha@example.com\t0123456789"}
+            placeholder={"First Name\tLast Name\tEmail Address\tExtension\nAsha\tSharma\tasha@example.com\t3000"}
             aria-label="Pasted phone directory rows"
           />
         </div>
@@ -246,7 +246,7 @@ export function PhoneDirectory() {
     <>
       <PageHeader
         title="Phone Directory"
-        description="Names, email addresses and phone numbers for the organisation."
+        description="Names, email addresses and extensions for the organisation."
         actions={
           <>
             <Button onClick={() => setImportOpen(true)}>Bulk import</Button>
@@ -264,7 +264,7 @@ export function PhoneDirectory() {
           <SearchInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Search by name, email or phone no…"
+            placeholder="Search by name, email or extension…"
           />
         </div>
 
@@ -287,7 +287,7 @@ export function PhoneDirectory() {
                   <th>First Name</th>
                   <th>Last Name</th>
                   <th>Email</th>
-                  <th>Phone No</th>
+                  <th>Extension</th>
                   <th aria-label="Actions" />
                 </tr>
               </thead>
