@@ -43,6 +43,7 @@ export interface LocalApp {
   id: string;
   name: string;
   path: string;
+  isSystem: boolean;
 }
 
 export interface Snapshot {
@@ -54,6 +55,8 @@ export interface Snapshot {
   announcement: Announcement | null;
   user: SnapshotUser;
   apps: AppTile[];
+  localAppsEnabled: boolean;
+  localAppsShowSystem: boolean;
   lastSyncedAt: string;
   source: "server" | "cache";
   expired: boolean;

@@ -13,6 +13,7 @@ export function TopBar({
   meta,
   view,
   onViewChange,
+  localAppsEnabled,
 }: {
   core: CoreInfo | null;
   title: string;
@@ -23,6 +24,7 @@ export function TopBar({
   view: "apps" | "local";
   onViewChange: (view: "apps" | "local") => void;
   localApps: LocalApp[];
+  localAppsEnabled: boolean;
 }) {
   return (
     <header className="desktop-topbar">
@@ -34,13 +36,15 @@ export function TopBar({
       </div>
 
       <div className="desktop-topbar__actions">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => onViewChange(view === "local" ? "apps" : "local")}
-        >
-          {view === "local" ? "Back to Apps" : "Local Apps"}
-        </Button>
+        {localAppsEnabled ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onViewChange(view === "local" ? "apps" : "local")}
+          >
+            {view === "local" ? "Back to Apps" : "Local Apps"}
+          </Button>
+        ) : null}
         <span className="desktop-sync" title={offline ? "Working from the saved snapshot" : "Connected"}>
           <span className={`desktop-dot${offline ? " desktop-dot--offline" : ""}`} />
           {refreshing ? "Syncing…" : offline ? "Offline" : "Synced"}

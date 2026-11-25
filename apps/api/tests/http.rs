@@ -373,3 +373,34 @@ async fn purge_user_archives_to_delete_agent_csv() {
     let grants = std::fs::read_to_string(h.dir.join("user_apps.csv")).unwrap();
     assert!(!grants.contains(&user_id.to_string()), "{grants}");
 }
+
+#[tokio::test]
+async fn sync_payload_carries_local_apps_flags_from_settings() {
+    let h = setup();
+    add_admin_user(&h, "admin", "super_admin");
+    add_user(&h, "plainuser", Some("IT"), true);
+
+    // Defaults: local apps enabled, system apps hidden.
+    let (status, sync) = get(&h, "/api/v1/client/sync", Some("ad\\plainuser")).await;
+    assert_eq!(status, StatusCode::OK, "{sync}");
+    assert_eq!(sync["localAppsEnabled"], json!(true));
+    assert_eq!(sync["localAppsShowSystem"], json!(false));
+
+    let (status, body) = json(
+        &h,
+        "PUT",
+        "/api/v1/admin/settings",
+        Some("ad\\admin"),
+        json!({ "values": {
+            "local_apps_enabled": 0,
+            "local_apps_show_system": 1
+        }}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, sync) = get(&h, "/api/v1/client/sync", Some("ad\\plainuser")).await;
+    assert_eq!(status, StatusCode::OK, "{sync}");
+    assert_eq!(sync["localAppsEnabled"], json!(false));
+    assert_eq!(sync["localAppsShowSystem"], json!(true));
+}

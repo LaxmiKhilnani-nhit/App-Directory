@@ -68,6 +68,8 @@ export function Settings() {
   const [updateEnabled, setUpdateEnabled] = useState(false);
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateUrl, setUpdateUrl] = useState("");
+  const [localAppsEnabled, setLocalAppsEnabled] = useState(true);
+  const [localAppsShowSystem, setLocalAppsShowSystem] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +100,8 @@ export function Settings() {
     setUpdateEnabled(settingValue(settings.data, "update_enabled") === 1);
     setUpdateVersion(asText(settingValue(settings.data, "update_version"), ""));
     setUpdateUrl(asText(settingValue(settings.data, "update_url"), ""));
+    setLocalAppsEnabled(settingValue(settings.data, "local_apps_enabled") !== 0);
+    setLocalAppsShowSystem(settingValue(settings.data, "local_apps_show_system") === 1);
     setLoaded(true);
   }, [settings.data, loaded]);
 
@@ -142,6 +146,8 @@ export function Settings() {
       update_enabled: updateEnabled ? 1 : 0,
       update_version: updateVersion.trim(),
       update_url: updateUrl.trim(),
+      local_apps_enabled: localAppsEnabled ? 1 : 0,
+      local_apps_show_system: localAppsShowSystem ? 1 : 0,
     });
 
     setBusy(true);
@@ -272,6 +278,24 @@ export function Settings() {
                   maxLength={300}
                 />
               </div>
+            </div>
+          </section>
+
+          <section className="admin-card">
+            <h2 className="admin-card__title">Local Apps</h2>
+            <div className="admin-form-stack" style={{ marginTop: "var(--space-3)" }}>
+              <CheckboxField
+                label="Enable Local Apps for users"
+                hint="When off, the Local Apps button is hidden from the desktop client entirely."
+                checked={localAppsEnabled}
+                onChange={setLocalAppsEnabled}
+              />
+              <CheckboxField
+                label="Show system apps in Local Apps"
+                hint="When off, Windows tools like Registry Editor and PowerShell are hidden."
+                checked={localAppsShowSystem}
+                onChange={setLocalAppsShowSystem}
+              />
             </div>
           </section>
 

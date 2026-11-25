@@ -177,6 +177,8 @@ mod tests {
                     department: None,
                 },
                 apps: Vec::new(),
+                local_apps_enabled: true,
+                local_apps_show_system: false,
             },
         }
     }

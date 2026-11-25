@@ -17,6 +17,38 @@ use crate::{api::CommandError, config};
 const CACHE_NAME: &str = "local_apps.json";
 const MAX_DEPTH: usize = 4;
 
+/// Start Menu folders that hold Windows administration tools rather than installed apps.
+const SYSTEM_FOLDERS: [&str; 6] = [
+    "Windows Tools",
+    "Administrative Tools",
+    "Windows PowerShell",
+    "System Tools",
+    "Startup",
+    "Windows Administration",
+];
+
+/// Conservative name hints for shortcuts that are clearly built-in Windows tools.
+const SYSTEM_NAMES: [&str; 18] = [
+    "registry editor",
+    "regedit",
+    "command prompt",
+    "cmd",
+    "powershell",
+    "control panel",
+    "device manager",
+    "disk management",
+    "event viewer",
+    "task scheduler",
+    "services",
+    "system configuration",
+    "msconfig",
+    "windows defender",
+    "disk cleanup",
+    "performance monitor",
+    "resource monitor",
+    "snipping tool",
+];
+
 /// A single discovered application. `path` points at a Windows Start Menu shortcut (.lnk).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +56,26 @@ pub struct LocalApp {
     pub id: String,
     pub name: String,
     pub path: String,
+    /// Present in results so administrators can opt in to showing them.
+    #[serde(default)]
+    pub is_system: bool,
+}
+
+/// Flags a discovered shortcut as a Windows system tool by its folder or its display name.
+fn is_system_app(name: &str, path: &str) -> bool {
+    let in_system_folder = Path::new(path).components().any(|component| {
+        component.as_os_str().to_str().is_some_and(|part| {
+            SYSTEM_FOLDERS
+                .iter()
+                .any(|folder| part.eq_ignore_ascii_case(folder))
+        })
+    });
+    if in_system_folder {
+        return true;
+    }
+
+    let lower = name.to_lowercase();
+    SYSTEM_NAMES.iter().any(|needle| lower.contains(needle))
 }
 
 fn ignore_name(name: &str) -> bool {
@@ -112,6 +164,7 @@ pub fn scan() -> Vec<LocalApp> {
         let path_text = path.to_string_lossy().to_string();
         apps.push(LocalApp {
             id: app_id(&path_text),
+            is_system: is_system_app(&name, &path_text),
             name,
             path: path_text,
         });
@@ -182,7 +235,7 @@ pub fn open(path: &str) -> Result<(), CommandError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{app_id, ignore_name};
+    use super::{app_id, ignore_name, is_system_app};
 
     #[test]
     fn stable_ids_and_noise_filter() {
@@ -190,5 +243,22 @@ mod tests {
         assert_ne!(app_id("a"), app_id("b"));
         assert!(ignore_name("Uninstall App"));
         assert!(!ignore_name("Google Chrome"));
+    }
+
+    #[test]
+    fn detects_windows_tools_by_folder_and_name() {
+        let tools = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Tools\Services.lnk";
+        assert!(is_system_app("Some tool", tools));
+        assert!(is_system_app("Registry Editor", r"C:\Start Menu\Programs\Registry Editor.lnk"));
+        assert!(is_system_app("Windows PowerShell", r"C:\Start Menu\Programs\PowerShell.lnk"));
+    }
+
+    #[test]
+    fn leaves_ordinary_apps_untouched() {
+        assert!(!is_system_app(
+            "Google Chrome",
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Google Chrome.lnk"
+        ));
+        assert!(!is_system_app("Payroll", r"C:\Start Menu\Programs\Payroll.lnk"));
     }
 }

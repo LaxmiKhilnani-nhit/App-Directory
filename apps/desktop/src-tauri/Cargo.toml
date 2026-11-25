@@ -1,6 +1,6 @@
 [package]
 name = "app-directory"
-version = "0.1.6"
+version = "0.1.7"
 description = "App Directory launcher"
 authors = ["NHIIML IT"]
 edition = "2021"

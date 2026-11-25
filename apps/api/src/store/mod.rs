@@ -74,6 +74,8 @@ pub fn default_settings() -> Vec<(&'static str, Value)> {
         ("mail_domain", json!("nhit.co.in")),
         ("default_identity", json!("")),
         ("update_enabled", json!(0)),
+        ("local_apps_enabled", json!(1)),
+        ("local_apps_show_system", json!(0)),
         ("update_version", json!("")),
         ("update_sha256", json!("")),
         ("update_url", json!("/download/app-directory.exe")),

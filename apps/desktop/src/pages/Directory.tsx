@@ -110,6 +110,7 @@ export function Directory({
         view={view}
         onViewChange={onViewChange}
         localApps={localApps}
+        localAppsEnabled={snapshot.localAppsEnabled}
       />
 
       <Section>
@@ -121,7 +122,7 @@ export function Directory({
         />
         <AnnouncementBanner value={snapshot.announcement} />
         {view === "local" ? (
-          <LocalApps apps={localApps} />
+          <LocalApps apps={localApps} showSystem={snapshot.localAppsShowSystem} />
         ) : (
           <>
             <AppsHeader search={query} onQueryChange={setQuery} searchRef={searchRef} />

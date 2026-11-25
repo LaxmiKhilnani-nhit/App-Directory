@@ -83,6 +83,8 @@ pub struct SyncPayload {
     pub offline_valid_until: DateTime<Utc>,
     pub snapshot_days: i64,
     pub sync_interval_hours: i64,
+    pub local_apps_enabled: bool,
+    pub local_apps_show_system: bool,
     pub announcement: Option<Value>,
     pub user: SyncUser,
     pub apps: Vec<SyncApp>,
