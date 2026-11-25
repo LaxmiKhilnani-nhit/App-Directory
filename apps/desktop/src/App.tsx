@@ -47,7 +47,7 @@ export function App() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>(EMPTY_UPDATE_STATUS);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
-  const [view, setView] = useState<"apps" | "phone" | "local">("apps");
+  const [view, setView] = useState<"apps" | "local">("apps");
   const [localApps, setLocalApps] = useState<LocalApp[]>([]);
   const booted = useRef(false);
 

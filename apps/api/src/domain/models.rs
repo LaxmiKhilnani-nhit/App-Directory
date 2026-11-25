@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::store::{AppRow, Data, GroupRow, PhoneDirectoryRow, SettingRow, UserRow};
+use crate::store::{AppRow, Data, GroupRow, SettingRow, UserRow};
 
 // ------------------------------------------------------------------ auth/session
 
@@ -75,42 +75,6 @@ pub struct SyncApp {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PhoneEntry {
-    pub id: Uuid,
-    pub first_name: String,
-    pub last_name: String,
-    pub email: String,
-    pub phone_no: String,
-}
-
-impl PhoneEntry {
-    pub fn from_row(row: &PhoneDirectoryRow) -> Self {
-        Self {
-            id: row.id,
-            first_name: row.first_name.clone(),
-            last_name: row.last_name.clone(),
-            email: row.email.clone(),
-            phone_no: row.phone_no.clone(),
-        }
-    }
-
-    /// Numeric extensions sort numerically; non-numeric ones go last. Names break ties.
-    pub fn sorted_from(data: &Data) -> Vec<Self> {
-        let mut entries: Vec<Self> = data.phone_directory.iter().map(Self::from_row).collect();
-        entries.sort_by(|left, right| {
-            let left_no = left.phone_no.parse::<u64>().unwrap_or(u64::MAX);
-            let right_no = right.phone_no.parse::<u64>().unwrap_or(u64::MAX);
-            left_no
-                .cmp(&right_no)
-                .then_with(|| left.last_name.cmp(&right.last_name))
-                .then_with(|| left.first_name.cmp(&right.first_name))
-        });
-        entries
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncPayload {
@@ -122,8 +86,6 @@ pub struct SyncPayload {
     pub announcement: Option<Value>,
     pub user: SyncUser,
     pub apps: Vec<SyncApp>,
-    #[serde(default)]
-    pub phone_directory: Vec<PhoneEntry>,
 }
 
 #[derive(Debug, Serialize)]
